@@ -7,16 +7,25 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 
+    <PackageId>VectorSharp.Storage</PackageId>
+    <Version>1.0.0</Version>
     <Title>VectorSharp.Storage</Title>
     <Authors>Adam Tovatt</Authors>
     <Description>A high-performance, zero-dependency .NET library for in-process vector similarity search with both in-memory and disk-backed storage.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>vector;embeddings;search;vector-search;cosine-similarity;in-memory;disk-backed;simd</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/AdamTovatt/vector-sharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
 
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <IncludeSymbols>True</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="VectorSharp.Storage.Tests" />
