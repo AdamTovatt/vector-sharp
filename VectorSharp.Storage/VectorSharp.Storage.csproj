@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+
+    <Title>VectorSharp.Storage</Title>
+    <Authors>Adam Tovatt</Authors>
+    <Description>A high-performance, zero-dependency .NET library for in-process vector similarity search with both in-memory and disk-backed storage.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>vector;embeddings;search;vector-search;cosine-similarity;in-memory;disk-backed;simd</PackageTags>
+
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VectorSharp.Storage.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="VectorSharp.Storage.Tests/VectorSharp.Storage.Tests.csproj" />
+  <Project Path="VectorSharp.Storage/VectorSharp.Storage.csproj" />
+</Solution>
