@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+
+    <PackageId>VectorSharp.Embedding.NomicEmbed</PackageId>
+    <Version>1.0.0</Version>
+    <Title>VectorSharp.Embedding.NomicEmbed</Title>
+    <Authors>Adam Tovatt</Authors>
+    <Description>Nomic Embed Text v1.5 embedding provider for VectorSharp. Bundles the int8 quantized ONNX model (768-dim, 8192 token context) for local inference with no external services.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>vector;embeddings;nomic;onnx;embedding-model;nomic-embed-text</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/AdamTovatt/vector-sharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VectorSharp.Embedding\VectorSharp.Embedding.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FastBertTokenizer" Version="1.0.28" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Models\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Models\**\*" Pack="true" PackagePath="contentFiles\any\net10.0\Models" />
+    <None Include="build\VectorSharp.Embedding.NomicEmbed.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VectorSharp.Embedding.NomicEmbed.Tests" />
+  </ItemGroup>
+
+</Project>

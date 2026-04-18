@@ -480,3 +480,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Python virtual environment for model conversion
+tools/venv/
+
+# ONNX model files (too large for git, downloaded via tools/download-nomic-model.sh)
+*.onnx

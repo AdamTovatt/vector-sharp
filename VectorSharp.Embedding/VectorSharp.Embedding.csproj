@@ -4,16 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 
-    <PackageId>VectorSharp.Storage</PackageId>
+    <PackageId>VectorSharp.Embedding</PackageId>
     <Version>1.0.0</Version>
-    <Title>VectorSharp.Storage</Title>
+    <Title>VectorSharp.Embedding</Title>
     <Authors>Adam Tovatt</Authors>
-    <Description>A high-performance, zero-dependency .NET library for in-process vector similarity search with both in-memory and disk-backed storage.</Description>
+    <Description>Channel-based embedding service with configurable parallelism for VectorSharp. Provider-agnostic — supports local ONNX models, remote HTTP endpoints, or any custom embedding source.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>vector;embeddings;search;vector-search;cosine-similarity;in-memory;disk-backed;simd</PackageTags>
+    <PackageTags>vector;embeddings;embedding-service;channels;parallelism</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/AdamTovatt/vector-sharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -28,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="VectorSharp.Storage.Tests" />
+    <InternalsVisibleTo Include="VectorSharp.Embedding.Tests" />
   </ItemGroup>
 
 </Project>

@@ -32,12 +32,17 @@ jobs:
         PACKAGE="${{ steps.tag.outputs.PACKAGE }}"
         # Map tag prefix to project name
         case "$PACKAGE" in
-          storage)   PROJECT="VectorSharp.Storage" ;;
-          embedding) PROJECT="VectorSharp.Embedding" ;;
-          *)         echo "Unknown package: $PACKAGE" && exit 1 ;;
+          storage)     PROJECT="VectorSharp.Storage" ;;
+          embedding)   PROJECT="VectorSharp.Embedding" ;;
+          nomic-embed) PROJECT="VectorSharp.Embedding.NomicEmbed" ;;
+          *)           echo "Unknown package: $PACKAGE" && exit 1 ;;
         esac
         echo "PROJECT=${PROJECT}" >> $GITHUB_OUTPUT
         echo "Project: ${PROJECT}"
+
+    - name: Download model files (if publishing nomic-embed)
+      if: steps.tag.outputs.PACKAGE == 'nomic-embed'
+      run: bash tools/download-nomic-model.sh
 
     - name: Restore dependencies
       run: dotnet restore
@@ -46,7 +51,7 @@ jobs:
       run: dotnet build --no-restore --configuration Release -p:Version=${{ steps.tag.outputs.VERSION }}
 
     - name: Test
-      run: dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~PerformanceTest"
+      run: dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~PerformanceTest&TestCategory!=RequiresModel"
 
     - name: Pack
       run: dotnet pack ${{ steps.project.outputs.PROJECT }} --no-build --configuration Release -p:Version=${{ steps.tag.outputs.VERSION }} --output ./nupkgs
