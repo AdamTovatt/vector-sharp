@@ -1,16 +1,16 @@
 namespace VectorSharp.Embedding.NomicEmbed.Tests
 {
-    [TestClass]
-    [TestCategory("RequiresModel")]
-    [DoNotParallelize]
+    [Trait("Category", "RequiresModel")]
     public class TokenizerDebugTests
     {
-        [TestMethod]
+        [SkippableFact]
         public void Tokenizer_HelloWorld_MatchesPythonTokenIds()
         {
             string tokenizerPath = Path.Combine(
                 Path.GetDirectoryName(typeof(TokenizerDebugTests).Assembly.Location)!,
                 "Models", "tokenizer.json");
+
+            Skip.IfNot(File.Exists(tokenizerPath), "Tokenizer file not found. Run tools/download-nomic-model.sh first.");
 
             FastBertTokenizer.BertTokenizer tokenizer = new FastBertTokenizer.BertTokenizer();
             using (Stream stream = File.OpenRead(tokenizerPath))
@@ -30,10 +30,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             // Python produces: [101, 3945, 1035, 6254, 1024, 7592, 2088, 102]
             long[] expected = new long[] { 101, 3945, 1035, 6254, 1024, 7592, 2088, 102 };
 
-            Assert.AreEqual(expected.Length, ids.Length, $"Token count mismatch. Got IDs: [{string.Join(", ", ids)}]");
+            Assert.Equal(expected.Length, ids.Length);
             for (int i = 0; i < expected.Length; i++)
             {
-                Assert.AreEqual(expected[i], ids[i], $"Token mismatch at position {i}");
+                Assert.Equal(expected[i], ids[i]);
             }
         }
     }

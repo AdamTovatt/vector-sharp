@@ -1,6 +1,5 @@
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class CosineVectorStoreTests
     {
         private const int DefaultDimension = 128;
@@ -8,63 +7,63 @@ namespace VectorSharp.Storage.Tests
 
         #region Constructor and Validation
 
-        [TestMethod]
+        [Fact]
         public void Constructor_PositiveDimension_Succeeds()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, 768);
 
-            Assert.AreEqual(768, store.Dimension);
-            Assert.AreEqual(DefaultName, store.Name);
-            Assert.AreEqual(0, store.Count);
+            Assert.Equal(768, store.Dimension);
+            Assert.Equal(DefaultName, store.Name);
+            Assert.Equal(0, store.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_ZeroDimension_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new CosineVectorStore<Guid>(DefaultName, 0));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NegativeDimension_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new CosineVectorStore<Guid>(DefaultName, -1));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NullName_Throws()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            Assert.Throws<ArgumentNullException>(() =>
                 new CosineVectorStore<Guid>(null!, 128));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task AddAsync_DimensionMismatch_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, 128);
             float[] wrongDimension = new float[64];
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+            await Assert.ThrowsAsync<ArgumentException>(() =>
                 store.AddAsync(Guid.NewGuid(), wrongDimension));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task AddAsync_NullValues_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, 128);
 
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 store.AddAsync(Guid.NewGuid(), null!));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_DimensionMismatch_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, 128);
             await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(128));
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+            await Assert.ThrowsAsync<ArgumentException>(() =>
                 store.FindMostSimilarAsync(new float[64], 1));
         }
 
@@ -72,16 +71,16 @@ namespace VectorSharp.Storage.Tests
 
         #region Basic Operations
 
-        [TestMethod]
+        [Fact]
         public async Task AddAsync_IncreasesCount()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
             await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension));
 
-            Assert.AreEqual(1, store.Count);
+            Assert.Equal(1, store.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_ExistingId_ReturnsTrue()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -90,11 +89,11 @@ namespace VectorSharp.Storage.Tests
 
             bool removed = await store.RemoveAsync(id);
 
-            Assert.IsTrue(removed);
-            Assert.AreEqual(0, store.Count);
+            Assert.True(removed);
+            Assert.Equal(0, store.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_NonExistentId_ReturnsFalse()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -102,11 +101,11 @@ namespace VectorSharp.Storage.Tests
 
             bool removed = await store.RemoveAsync(Guid.NewGuid());
 
-            Assert.IsFalse(removed);
-            Assert.AreEqual(1, store.Count);
+            Assert.False(removed);
+            Assert.Equal(1, store.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_EmptyStore_ReturnsEmpty()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -114,10 +113,10 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                 TestHelpers.CreateRandomVector(DefaultDimension), 10);
 
-            Assert.AreEqual(0, results.Count);
+            Assert.Empty(results);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ReturnsTopMatch()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -129,12 +128,12 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(targetVector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(targetId, results[0].Id);
-            Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+            Assert.Single(results);
+            Assert.Equal(targetId, results[0].Id);
+            TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_RespectsCount()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -146,10 +145,10 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                 TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 3);
 
-            Assert.AreEqual(3, results.Count);
+            Assert.Equal(3, results.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_RequestingMoreThanStored_ReturnsAll()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -159,20 +158,20 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                 TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 100);
 
-            Assert.AreEqual(2, results.Count);
+            Assert.Equal(2, results.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_NullQuery_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
             await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension));
 
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 store.FindMostSimilarAsync(null!, 10));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ZeroCount_ReturnsEmpty()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -181,10 +180,10 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                 TestHelpers.CreateRandomVector(DefaultDimension), 0);
 
-            Assert.AreEqual(0, results.Count);
+            Assert.Empty(results);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ZeroVector_ReturnsEmpty()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -193,14 +192,14 @@ namespace VectorSharp.Storage.Tests
             float[] zeroVector = new float[DefaultDimension];
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(zeroVector, 10);
 
-            Assert.AreEqual(0, results.Count);
+            Assert.Empty(results);
         }
 
         #endregion
 
         #region Sorted Results
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ReturnsSortedDescending()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -213,15 +212,15 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(query, 3);
 
-            Assert.AreEqual(3, results.Count);
+            Assert.Equal(3, results.Count);
             for (int i = 1; i < results.Count; i++)
             {
-                Assert.IsTrue(results[i - 1].Score >= results[i].Score,
+                Assert.True(results[i - 1].Score >= results[i].Score,
                     $"Results not sorted: index {i - 1} has score {results[i - 1].Score}, index {i} has score {results[i].Score}");
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ResultsContainStoreName()
         {
             string storeName = "my-embeddings";
@@ -231,15 +230,15 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                 TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(storeName, results[0].StoreName);
+            Assert.Single(results);
+            Assert.Equal(storeName, results[0].StoreName);
         }
 
         #endregion
 
         #region Generic Key Types
 
-        [TestMethod]
+        [Fact]
         public async Task Store_WithIntKey_WorksCorrectly()
         {
             using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
@@ -248,11 +247,11 @@ namespace VectorSharp.Storage.Tests
             await store.AddAsync(42, vector);
             IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(vector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(42, results[0].Id);
+            Assert.Single(results);
+            Assert.Equal(42, results[0].Id);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_WithLongKey_WorksCorrectly()
         {
             using CosineVectorStore<long> store = new CosineVectorStore<long>(DefaultName, DefaultDimension);
@@ -261,11 +260,11 @@ namespace VectorSharp.Storage.Tests
             await store.AddAsync(123456789L, vector);
             IReadOnlyList<SearchResult<long>> results = await store.FindMostSimilarAsync(vector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(123456789L, results[0].Id);
+            Assert.Single(results);
+            Assert.Equal(123456789L, results[0].Id);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_RemoveWithIntKey_WorksCorrectly()
         {
             using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
@@ -274,57 +273,57 @@ namespace VectorSharp.Storage.Tests
 
             bool removed = await store.RemoveAsync(1);
 
-            Assert.IsTrue(removed);
-            Assert.AreEqual(1, store.Count);
+            Assert.True(removed);
+            Assert.Equal(1, store.Count);
         }
 
         #endregion
 
         #region Dimension Variations
 
-        [TestMethod]
+        [Fact]
         public async Task Store_SmallDimension64_WorksCorrectly()
         {
             await VerifyDimensionWorks(64);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_MediumDimension256_WorksCorrectly()
         {
             await VerifyDimensionWorks(256);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_Dimension768_WorksCorrectly()
         {
             await VerifyDimensionWorks(768);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_Dimension1024_WorksCorrectly()
         {
             await VerifyDimensionWorks(1024);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_Dimension1536_WorksCorrectly()
         {
             await VerifyDimensionWorks(1536);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_LargeDimension2048_WorksCorrectly()
         {
             await VerifyDimensionWorks(2048);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_NonSIMDAlignedDimension_WorksCorrectly()
         {
             await VerifyDimensionWorks(13);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Store_NonSIMDAlignedDimension127_WorksCorrectly()
         {
             await VerifyDimensionWorks(127);
@@ -334,7 +333,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Thread Safety
 
-        [TestMethod]
+        [Fact]
         public async Task ConcurrentAddRemove_IsThreadSafe()
         {
             using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
@@ -349,7 +348,7 @@ namespace VectorSharp.Storage.Tests
             }
 
             await Task.WhenAll(addTasks);
-            Assert.AreEqual(addCount, store.Count);
+            Assert.Equal(addCount, store.Count);
 
             // Remove half concurrently
             Task<bool>[] removeTasks = new Task<bool>[addCount / 2];
@@ -359,11 +358,11 @@ namespace VectorSharp.Storage.Tests
             }
 
             bool[] removeResults = await Task.WhenAll(removeTasks);
-            Assert.IsTrue(removeResults.All(r => r));
-            Assert.AreEqual(addCount / 2, store.Count);
+            Assert.True(removeResults.All(r => r));
+            Assert.Equal(addCount / 2, store.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task ConcurrentSearch_IsThreadSafe()
         {
             using CosineVectorStore<int> store = await TestHelpers.CreatePopulatedIntStoreAsync(
@@ -383,7 +382,7 @@ namespace VectorSharp.Storage.Tests
 
             foreach (IReadOnlyList<SearchResult<int>> results in allResults)
             {
-                Assert.AreEqual(5, results.Count);
+                Assert.Equal(5, results.Count);
             }
         }
 
@@ -391,7 +390,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Cosine Similarity Correctness
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_IdenticalVector_ReturnsScoreOfOne()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -401,12 +400,12 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(vector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(id, results[0].Id);
-            Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+            Assert.Single(results);
+            Assert.Equal(id, results[0].Id);
+            TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_OppositeVector_ReturnsNegativeScore()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
@@ -417,8 +416,8 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(vector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(-1.0f, results[0].Score, 0.0001f);
+            Assert.Single(results);
+            TestHelpers.AssertApproximatelyEqual(-1.0f, results[0].Score, 0.0001f);
         }
 
         #endregion
@@ -441,9 +440,9 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(vector, 1);
 
-            Assert.AreEqual(1, results.Count);
-            Assert.AreEqual(id, results[0].Id);
-            Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+            Assert.Single(results);
+            Assert.Equal(id, results[0].Id);
+            TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
         }
 
         #endregion

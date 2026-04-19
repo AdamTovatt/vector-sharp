@@ -1,6 +1,5 @@
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class DiskVectorStoreTests
     {
         private const int DefaultDimension = 128;
@@ -16,7 +15,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Constructor
 
-        [TestMethod]
+        [Fact]
         public void Constructor_CreatesNewFile_WhenNotExists()
         {
             string filePath = GetTempFilePath();
@@ -24,10 +23,10 @@ namespace VectorSharp.Storage.Tests
             {
                 using DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
 
-                Assert.IsTrue(File.Exists(filePath));
-                Assert.AreEqual(0, store.Count);
-                Assert.AreEqual(DefaultDimension, store.Dimension);
-                Assert.AreEqual(DefaultName, store.Name);
+                Assert.True(File.Exists(filePath));
+                Assert.Equal(0, store.Count);
+                Assert.Equal(DefaultDimension, store.Dimension);
+                Assert.Equal(DefaultName, store.Name);
             }
             finally
             {
@@ -35,7 +34,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Constructor_OpensExistingFile()
         {
             string filePath = GetTempFilePath();
@@ -50,7 +49,7 @@ namespace VectorSharp.Storage.Tests
 
                 // Re-open the same file
                 using DiskVectorStore<Guid> reopened = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
-                Assert.AreEqual(2, reopened.Count);
+                Assert.Equal(2, reopened.Count);
             }
             finally
             {
@@ -58,7 +57,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task Constructor_DimensionMismatch_Throws()
         {
             string filePath = GetTempFilePath();
@@ -69,7 +68,7 @@ namespace VectorSharp.Storage.Tests
                     await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(128));
                 }
 
-                Assert.ThrowsExactly<InvalidOperationException>(() =>
+                Assert.Throws<InvalidOperationException>(() =>
                     new DiskVectorStore<Guid>(DefaultName, filePath, 256));
             }
             finally
@@ -78,24 +77,24 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NullName_Throws()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            Assert.Throws<ArgumentNullException>(() =>
                 new DiskVectorStore<Guid>(null!, "file.dat", 128));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NullFilePath_Throws()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            Assert.Throws<ArgumentNullException>(() =>
                 new DiskVectorStore<Guid>(DefaultName, null!, 128));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_ZeroDimension_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new DiskVectorStore<Guid>(DefaultName, GetTempFilePath(), 0));
         }
 
@@ -103,7 +102,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Add and Remove
 
-        [TestMethod]
+        [Fact]
         public async Task AddAsync_AppendsRecord()
         {
             string filePath = GetTempFilePath();
@@ -112,10 +111,10 @@ namespace VectorSharp.Storage.Tests
                 using DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
 
                 await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension));
-                Assert.AreEqual(1, store.Count);
+                Assert.Equal(1, store.Count);
 
                 await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension, seed: 2));
-                Assert.AreEqual(2, store.Count);
+                Assert.Equal(2, store.Count);
             }
             finally
             {
@@ -123,7 +122,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task AddAsync_DimensionMismatch_Throws()
         {
             string filePath = GetTempFilePath();
@@ -131,7 +130,7 @@ namespace VectorSharp.Storage.Tests
             {
                 using DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
 
-                await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+                await Assert.ThrowsAsync<ArgumentException>(() =>
                     store.AddAsync(Guid.NewGuid(), new float[64]));
             }
             finally
@@ -140,7 +139,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_MarksDeleted()
         {
             string filePath = GetTempFilePath();
@@ -153,8 +152,8 @@ namespace VectorSharp.Storage.Tests
 
                 bool removed = await store.RemoveAsync(id);
 
-                Assert.IsTrue(removed);
-                Assert.AreEqual(1, store.Count);
+                Assert.True(removed);
+                Assert.Equal(1, store.Count);
             }
             finally
             {
@@ -162,7 +161,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_NonExistent_ReturnsFalse()
         {
             string filePath = GetTempFilePath();
@@ -173,8 +172,8 @@ namespace VectorSharp.Storage.Tests
 
                 bool removed = await store.RemoveAsync(Guid.NewGuid());
 
-                Assert.IsFalse(removed);
-                Assert.AreEqual(1, store.Count);
+                Assert.False(removed);
+                Assert.Equal(1, store.Count);
             }
             finally
             {
@@ -186,7 +185,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Search
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ReturnsCorrectResults()
         {
             string filePath = GetTempFilePath();
@@ -201,9 +200,9 @@ namespace VectorSharp.Storage.Tests
 
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(targetVector, 1);
 
-                Assert.AreEqual(1, results.Count);
-                Assert.AreEqual(targetId, results[0].Id);
-                Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+                Assert.Single(results);
+                Assert.Equal(targetId, results[0].Id);
+                TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
             }
             finally
             {
@@ -211,7 +210,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ExcludesDeletedKeys()
         {
             string filePath = GetTempFilePath();
@@ -230,8 +229,8 @@ namespace VectorSharp.Storage.Tests
 
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(targetVector, 1);
 
-                Assert.AreEqual(1, results.Count);
-                Assert.AreEqual(otherId, results[0].Id);
+                Assert.Single(results);
+                Assert.Equal(otherId, results[0].Id);
             }
             finally
             {
@@ -239,7 +238,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_EmptyStore_ReturnsEmpty()
         {
             string filePath = GetTempFilePath();
@@ -250,7 +249,7 @@ namespace VectorSharp.Storage.Tests
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(
                     TestHelpers.CreateRandomVector(DefaultDimension), 10);
 
-                Assert.AreEqual(0, results.Count);
+                Assert.Empty(results);
             }
             finally
             {
@@ -258,7 +257,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_ReturnsSortedDescending()
         {
             string filePath = GetTempFilePath();
@@ -273,10 +272,10 @@ namespace VectorSharp.Storage.Tests
 
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(query, 3);
 
-                Assert.AreEqual(3, results.Count);
+                Assert.Equal(3, results.Count);
                 for (int i = 1; i < results.Count; i++)
                 {
-                    Assert.IsTrue(results[i - 1].Score >= results[i].Score,
+                    Assert.True(results[i - 1].Score >= results[i].Score,
                         $"Results not sorted at index {i}");
                 }
             }
@@ -286,7 +285,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_WithIntKeys()
         {
             string filePath = GetTempFilePath();
@@ -300,8 +299,8 @@ namespace VectorSharp.Storage.Tests
 
                 IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(vector, 1);
 
-                Assert.AreEqual(1, results.Count);
-                Assert.AreEqual(42, results[0].Id);
+                Assert.Single(results);
+                Assert.Equal(42, results[0].Id);
             }
             finally
             {
@@ -313,7 +312,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Compact
 
-        [TestMethod]
+        [Fact]
         public async Task CompactAsync_RemovesDeletedRecords()
         {
             string filePath = GetTempFilePath();
@@ -330,14 +329,14 @@ namespace VectorSharp.Storage.Tests
                 await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension, seed: 3));
 
                 await store.RemoveAsync(deleteId);
-                Assert.AreEqual(2, store.Count);
+                Assert.Equal(2, store.Count);
 
                 await store.CompactAsync();
-                Assert.AreEqual(2, store.Count);
+                Assert.Equal(2, store.Count);
 
                 // Verify search still works after compaction
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(keepVector, 1);
-                Assert.AreEqual(keepId, results[0].Id);
+                Assert.Equal(keepId, results[0].Id);
             }
             finally
             {
@@ -345,7 +344,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task CompactAsync_NoDeleted_IsNoOp()
         {
             string filePath = GetTempFilePath();
@@ -359,7 +358,7 @@ namespace VectorSharp.Storage.Tests
                 await store.CompactAsync();
 
                 long sizeAfter = new FileInfo(filePath).Length;
-                Assert.AreEqual(sizeBefore, sizeAfter);
+                Assert.Equal(sizeBefore, sizeAfter);
             }
             finally
             {
@@ -367,7 +366,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task CompactAsync_PreservesDataAcrossReopen()
         {
             string filePath = GetTempFilePath();
@@ -391,10 +390,10 @@ namespace VectorSharp.Storage.Tests
 
                 // Re-open and verify
                 using DiskVectorStore<Guid> reopened = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
-                Assert.AreEqual(2, reopened.Count);
+                Assert.Equal(2, reopened.Count);
 
                 IReadOnlyList<SearchResult<Guid>> results = await reopened.FindMostSimilarAsync(keepVector, 1);
-                Assert.AreEqual(keepId, results[0].Id);
+                Assert.Equal(keepId, results[0].Id);
             }
             finally
             {
@@ -406,7 +405,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Persistence Across Reopen
 
-        [TestMethod]
+        [Fact]
         public async Task Persistence_SurvivesDisposeAndReopen()
         {
             string filePath = GetTempFilePath();
@@ -421,11 +420,11 @@ namespace VectorSharp.Storage.Tests
                 }
 
                 using DiskVectorStore<Guid> reopened = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
-                Assert.AreEqual(1, reopened.Count);
+                Assert.Equal(1, reopened.Count);
 
                 IReadOnlyList<SearchResult<Guid>> results = await reopened.FindMostSimilarAsync(vector, 1);
-                Assert.AreEqual(id, results[0].Id);
-                Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+                Assert.Equal(id, results[0].Id);
+                TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
             }
             finally
             {
@@ -437,7 +436,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Format Compatibility
 
-        [TestMethod]
+        [Fact]
         public async Task FileFormat_CompatibleWithCosineVectorStoreSave()
         {
             string filePath = GetTempFilePath();
@@ -457,11 +456,11 @@ namespace VectorSharp.Storage.Tests
 
                 // Open with disk store
                 using DiskVectorStore<Guid> diskStore = new DiskVectorStore<Guid>("disk", filePath, DefaultDimension);
-                Assert.AreEqual(1, diskStore.Count);
+                Assert.Equal(1, diskStore.Count);
 
                 IReadOnlyList<SearchResult<Guid>> results = await diskStore.FindMostSimilarAsync(vector, 1);
-                Assert.AreEqual(id, results[0].Id);
-                Assert.AreEqual(1.0f, results[0].Score, 0.0001f);
+                Assert.Equal(id, results[0].Id);
+                TestHelpers.AssertApproximatelyEqual(1.0f, results[0].Score, 0.0001f);
             }
             finally
             {
@@ -473,7 +472,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Concurrency
 
-        [TestMethod]
+        [Fact]
         public async Task ConcurrentReads_AreThreadSafe()
         {
             string filePath = GetTempFilePath();
@@ -499,7 +498,7 @@ namespace VectorSharp.Storage.Tests
 
                 foreach (IReadOnlyList<SearchResult<int>> results in allResults)
                 {
-                    Assert.AreEqual(5, results.Count);
+                    Assert.Equal(5, results.Count);
                 }
             }
             finally
@@ -512,7 +511,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Delete Persistence
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_DeletePersistsAcrossReopen()
         {
             string filePath = GetTempFilePath();
@@ -528,21 +527,21 @@ namespace VectorSharp.Storage.Tests
                 {
                     await store.AddAsync(keepId, keepVector);
                     await store.AddAsync(deleteId, deleteVector);
-                    Assert.AreEqual(2, store.Count);
+                    Assert.Equal(2, store.Count);
 
                     bool removed = await store.RemoveAsync(deleteId);
-                    Assert.IsTrue(removed);
-                    Assert.AreEqual(1, store.Count);
+                    Assert.True(removed);
+                    Assert.Equal(1, store.Count);
                 }
 
                 // Reopen and verify delete persisted
                 using (DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension))
                 {
-                    Assert.AreEqual(1, store.Count);
+                    Assert.Equal(1, store.Count);
 
                     IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(keepVector, 10);
-                    Assert.AreEqual(1, results.Count);
-                    Assert.AreEqual(keepId, results[0].Id);
+                    Assert.Single(results);
+                    Assert.Equal(keepId, results[0].Id);
                 }
             }
             finally
@@ -551,7 +550,7 @@ namespace VectorSharp.Storage.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task RemoveAsync_DeletePersistsAcrossReopen_ThenCompact()
         {
             string filePath = GetTempFilePath();
@@ -569,17 +568,17 @@ namespace VectorSharp.Storage.Tests
                     await store.AddAsync(deleteId, deleteVector);
                     await store.RemoveAsync(deleteId);
                     await store.CompactAsync();
-                    Assert.AreEqual(1, store.Count);
+                    Assert.Equal(1, store.Count);
                 }
 
                 // Reopen and verify
                 using (DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension))
                 {
-                    Assert.AreEqual(1, store.Count);
+                    Assert.Equal(1, store.Count);
 
                     IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(keepVector, 10);
-                    Assert.AreEqual(1, results.Count);
-                    Assert.AreEqual(keepId, results[0].Id);
+                    Assert.Single(results);
+                    Assert.Equal(keepId, results[0].Id);
                 }
             }
             finally
@@ -592,7 +591,7 @@ namespace VectorSharp.Storage.Tests
 
         #region Null Query
 
-        [TestMethod]
+        [Fact]
         public async Task FindMostSimilarAsync_NullQuery_Throws()
         {
             string filePath = GetTempFilePath();
@@ -601,7 +600,7 @@ namespace VectorSharp.Storage.Tests
                 using DiskVectorStore<Guid> store = new DiskVectorStore<Guid>(DefaultName, filePath, DefaultDimension);
                 await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension));
 
-                await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+                await Assert.ThrowsAsync<ArgumentNullException>(() =>
                     store.FindMostSimilarAsync(null!, 10));
             }
             finally

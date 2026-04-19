@@ -1,45 +1,44 @@
 namespace VectorSharp.Embedding.Tests
 {
-    [TestClass]
     public class EmbeddingServiceTests
     {
         #region Constructor
 
-        [TestMethod]
+        [Fact]
         public async Task Constructor_ValidFactory_Succeeds()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
 
-            Assert.AreEqual(768, service.Dimension);
+            Assert.Equal(768, service.Dimension);
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NullFactory_Throws()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            Assert.Throws<ArgumentNullException>(() =>
                 new EmbeddingService(null!));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_ZeroConcurrency_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new EmbeddingService(() => new TestEmbeddingProvider(),
                     new EmbeddingServiceOptions { Concurrency = 0 }));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_NegativeConcurrency_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new EmbeddingService(() => new TestEmbeddingProvider(),
                     new EmbeddingServiceOptions { Concurrency = -1 }));
         }
 
-        [TestMethod]
+        [Fact]
         public void Constructor_ZeroChannelCapacity_Throws()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new EmbeddingService(() => new TestEmbeddingProvider(),
                     new EmbeddingServiceOptions { ChannelCapacity = 0 }));
         }
@@ -48,29 +47,29 @@ namespace VectorSharp.Embedding.Tests
 
         #region Dimension
 
-        [TestMethod]
+        [Fact]
         public async Task Dimension_ReturnsProviderDimension()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider(384));
 
-            Assert.AreEqual(384, service.Dimension);
+            Assert.Equal(384, service.Dimension);
         }
 
         #endregion
 
         #region EmbedAsync
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_ValidText_ReturnsCorrectDimension()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider(128));
 
             float[] result = await service.EmbedAsync("hello world");
 
-            Assert.AreEqual(128, result.Length);
+            Assert.Equal(128, result.Length);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_SameText_ReturnsSameResult()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
@@ -78,10 +77,10 @@ namespace VectorSharp.Embedding.Tests
             float[] result1 = await service.EmbedAsync("hello");
             float[] result2 = await service.EmbedAsync("hello");
 
-            CollectionAssert.AreEqual(result1, result2);
+            Assert.Equal(result1, result2);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_DifferentTexts_ReturnsDifferentResults()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
@@ -89,34 +88,34 @@ namespace VectorSharp.Embedding.Tests
             float[] result1 = await service.EmbedAsync("hello");
             float[] result2 = await service.EmbedAsync("world");
 
-            CollectionAssert.AreNotEqual(result1, result2);
+            Assert.NotEqual(result1, result2);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_NullText_Throws()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
 
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 service.EmbedAsync(null!));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_AfterDispose_Throws()
         {
             EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
             await service.DisposeAsync();
 
-            await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() =>
+            await Assert.ThrowsAsync<ObjectDisposedException>(() =>
                 service.EmbedAsync("hello"));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_ProviderThrows_PropagatesException()
         {
             await using EmbeddingService service = new EmbeddingService(() => new FailingProvider());
 
-            await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 service.EmbedAsync("hello"));
         }
 
@@ -124,40 +123,40 @@ namespace VectorSharp.Embedding.Tests
 
         #region EmbedBatchAsync
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedBatchAsync_MultipleTexts_ReturnsAllResults()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider(128));
 
             float[][] results = await service.EmbedBatchAsync(new[] { "a", "b", "c" });
 
-            Assert.AreEqual(3, results.Length);
+            Assert.Equal(3, results.Length);
             foreach (float[] result in results)
             {
-                Assert.AreEqual(128, result.Length);
+                Assert.Equal(128, result.Length);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedBatchAsync_EmptyList_ReturnsEmptyArray()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
 
             float[][] results = await service.EmbedBatchAsync(Array.Empty<string>());
 
-            Assert.AreEqual(0, results.Length);
+            Assert.Empty(results);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedBatchAsync_NullList_Throws()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
 
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 service.EmbedBatchAsync(null!));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedBatchAsync_ResultCountMatchesInput()
         {
             await using EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());
@@ -170,14 +169,14 @@ namespace VectorSharp.Embedding.Tests
 
             float[][] results = await service.EmbedBatchAsync(texts);
 
-            Assert.AreEqual(20, results.Length);
+            Assert.Equal(20, results.Length);
         }
 
         #endregion
 
         #region Concurrency
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_MultipleConcurrentRequests_AllComplete()
         {
             await using EmbeddingService service = new EmbeddingService(
@@ -192,14 +191,14 @@ namespace VectorSharp.Embedding.Tests
 
             float[][] results = await Task.WhenAll(tasks);
 
-            Assert.AreEqual(20, results.Length);
+            Assert.Equal(20, results.Length);
             foreach (float[] result in results)
             {
-                Assert.AreEqual(128, result.Length);
+                Assert.Equal(128, result.Length);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task EmbedAsync_WithConcurrency2_UsesMultipleWorkers()
         {
             // Verify that both workers process requests by checking total call count
@@ -218,14 +217,14 @@ namespace VectorSharp.Embedding.Tests
 
             await Task.WhenAll(tasks);
 
-            Assert.AreEqual(20, counter.Value);
+            Assert.Equal(20, counter.Value);
         }
 
         #endregion
 
         #region Disposal
 
-        [TestMethod]
+        [Fact]
         public async Task DisposeAsync_Idempotent_SecondCallNoOp()
         {
             EmbeddingService service = new EmbeddingService(() => new TestEmbeddingProvider());

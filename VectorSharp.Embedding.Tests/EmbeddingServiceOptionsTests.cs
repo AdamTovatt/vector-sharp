@@ -1,38 +1,37 @@
 namespace VectorSharp.Embedding.Tests
 {
-    [TestClass]
     public class EmbeddingServiceOptionsTests
     {
-        [TestMethod]
+        [Fact]
         public void DefaultConcurrency_IsOne()
         {
             EmbeddingServiceOptions options = new EmbeddingServiceOptions();
 
-            Assert.AreEqual(1, options.Concurrency);
+            Assert.Equal(1, options.Concurrency);
         }
 
-        [TestMethod]
+        [Fact]
         public void DefaultChannelCapacity_IsOneThousand()
         {
             EmbeddingServiceOptions options = new EmbeddingServiceOptions();
 
-            Assert.AreEqual(1000, options.ChannelCapacity);
+            Assert.Equal(1000, options.ChannelCapacity);
         }
 
-        [TestMethod]
+        [Fact]
         public void Concurrency_CustomValue_IsRetained()
         {
             EmbeddingServiceOptions options = new EmbeddingServiceOptions { Concurrency = 4 };
 
-            Assert.AreEqual(4, options.Concurrency);
+            Assert.Equal(4, options.Concurrency);
         }
 
-        [TestMethod]
+        [Fact]
         public void ChannelCapacity_CustomValue_IsRetained()
         {
             EmbeddingServiceOptions options = new EmbeddingServiceOptions { ChannelCapacity = 500 };
 
-            Assert.AreEqual(500, options.ChannelCapacity);
+            Assert.Equal(500, options.ChannelCapacity);
         }
     }
 }

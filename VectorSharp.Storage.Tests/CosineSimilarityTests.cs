@@ -1,9 +1,8 @@
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class CosineSimilarityTests
     {
-        [TestMethod]
+        [Fact]
         public void CalculateMagnitude_UnitVector_ReturnsOne()
         {
             // A unit vector along the first axis
@@ -12,20 +11,20 @@ namespace VectorSharp.Storage.Tests
 
             float magnitude = CosineSimilarity.CalculateMagnitude(vector.AsSpan());
 
-            Assert.AreEqual(1.0f, magnitude, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(1.0f, magnitude, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public void CalculateMagnitude_ZeroVector_ReturnsZero()
         {
             float[] vector = new float[10];
 
             float magnitude = CosineSimilarity.CalculateMagnitude(vector.AsSpan());
 
-            Assert.AreEqual(0.0f, magnitude);
+            Assert.Equal(0.0f, magnitude);
         }
 
-        [TestMethod]
+        [Fact]
         public void CalculateMagnitude_KnownVector_ReturnsExpected()
         {
             // [3, 4] -> magnitude = 5
@@ -33,10 +32,10 @@ namespace VectorSharp.Storage.Tests
 
             float magnitude = CosineSimilarity.CalculateMagnitude(vector.AsSpan());
 
-            Assert.AreEqual(5.0f, magnitude, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(5.0f, magnitude, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_IdenticalVectors_ReturnsOne()
         {
             float[] vector = TestHelpers.CreateRandomVector(128, seed: 42);
@@ -44,10 +43,10 @@ namespace VectorSharp.Storage.Tests
 
             float similarity = CosineSimilarity.Calculate(vector.AsSpan(), magnitude, vector.AsSpan(), magnitude);
 
-            Assert.AreEqual(1.0f, similarity, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(1.0f, similarity, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_OrthogonalVectors_ReturnsZero()
         {
             float[] a = new float[] { 1.0f, 0.0f, 0.0f };
@@ -57,10 +56,10 @@ namespace VectorSharp.Storage.Tests
 
             float similarity = CosineSimilarity.Calculate(a.AsSpan(), magA, b.AsSpan(), magB);
 
-            Assert.AreEqual(0.0f, similarity, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(0.0f, similarity, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_OppositeVectors_ReturnsNegativeOne()
         {
             float[] a = new float[] { 1.0f, 2.0f, 3.0f };
@@ -70,10 +69,10 @@ namespace VectorSharp.Storage.Tests
 
             float similarity = CosineSimilarity.Calculate(a.AsSpan(), magA, b.AsSpan(), magB);
 
-            Assert.AreEqual(-1.0f, similarity, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(-1.0f, similarity, 0.0001f);
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_ZeroMagnitude_ReturnsZero()
         {
             float[] a = new float[] { 1.0f, 2.0f, 3.0f };
@@ -81,10 +80,10 @@ namespace VectorSharp.Storage.Tests
 
             float similarity = CosineSimilarity.Calculate(a.AsSpan(), 3.74f, b.AsSpan(), 0.0f);
 
-            Assert.AreEqual(0.0f, similarity);
+            Assert.Equal(0.0f, similarity);
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_768Dimensions_ReturnsCorrectResult()
         {
             float[] a = TestHelpers.CreateRandomVector(768, seed: 1);
@@ -95,11 +94,11 @@ namespace VectorSharp.Storage.Tests
             float similarity = CosineSimilarity.Calculate(a.AsSpan(), magA, b.AsSpan(), magB);
 
             // Should be a valid cosine similarity in [-1, 1]
-            Assert.IsTrue(similarity >= -1.0f && similarity <= 1.0f,
+            Assert.True(similarity >= -1.0f && similarity <= 1.0f,
                 $"Expected similarity in [-1, 1], got {similarity}");
         }
 
-        [TestMethod]
+        [Fact]
         public void Calculate_NonSIMDAlignedDimension_WorksCorrectly()
         {
             // Use a dimension that's not aligned to SIMD width
@@ -110,12 +109,12 @@ namespace VectorSharp.Storage.Tests
 
             float similarity = CosineSimilarity.Calculate(a.AsSpan(), magA, b.AsSpan(), magB);
 
-            Assert.IsTrue(similarity >= -1.0f && similarity <= 1.0f,
+            Assert.True(similarity >= -1.0f && similarity <= 1.0f,
                 $"Expected similarity in [-1, 1], got {similarity}");
 
             // Also verify identical vectors still return 1.0
             float selfSimilarity = CosineSimilarity.Calculate(a.AsSpan(), magA, a.AsSpan(), magA);
-            Assert.AreEqual(1.0f, selfSimilarity, 0.0001f);
+            TestHelpers.AssertApproximatelyEqual(1.0f, selfSimilarity, 0.0001f);
         }
     }
 }

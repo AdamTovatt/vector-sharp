@@ -4,9 +4,7 @@ using VectorSharp.Embedding.NomicEmbed;
 
 namespace VectorSharp.Embedding.NomicEmbed.Tests
 {
-    [TestClass]
-    [TestCategory("RequiresModel")]
-    [DoNotParallelize]
+    [Trait("Category", "RequiresModel")]
     public class EmbeddingPerformanceTests
     {
         private const int WarmupCount = 5;
@@ -17,10 +15,9 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             string assemblyDir = Path.GetDirectoryName(typeof(EmbeddingPerformanceTests).Assembly.Location)!;
             string modelsDir = Path.Combine(assemblyDir, "Models");
 
-            if (!Directory.Exists(modelsDir) || !File.Exists(Path.Combine(modelsDir, "model_int8.onnx")))
-            {
-                Assert.Inconclusive("Model files not found. Run tools/download-nomic-model.sh first.");
-            }
+            Skip.IfNot(
+                Directory.Exists(modelsDir) && File.Exists(Path.Combine(modelsDir, "model_int8.onnx")),
+                "Model files not found. Run tools/download-nomic-model.sh first.");
 
             return modelsDir;
         }
@@ -36,7 +33,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             return texts;
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task PerformanceTest_SingleWorkerThroughput()
         {
             string modelsDir = GetModelDirectory();
@@ -62,7 +59,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             for (int i = 0; i < EmbeddingCount; i++)
             {
                 float[] result = await service.EmbedAsync(texts[i]);
-                Assert.AreEqual(768, result.Length);
+                Assert.Equal(768, result.Length);
             }
 
             timer.Stop();
@@ -75,13 +72,13 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             Console.WriteLine($"Per embedding: {msPerEmbedding:F2} ms");
             Console.WriteLine($"Throughput: {embeddingsPerSecond:F1} embeddings/second");
 
-            Assert.IsTrue(timer.ElapsedMilliseconds > 0);
+            Assert.True(timer.ElapsedMilliseconds > 0);
         }
 
-        [TestMethod]
-        [DataRow(1)]
-        [DataRow(2)]
-        [DataRow(4)]
+        [SkippableTheory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(4)]
         public async Task PerformanceTest_ThroughputByConcurrency(int concurrency)
         {
             string modelsDir = GetModelDirectory();
@@ -118,23 +115,23 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             Console.WriteLine($"Per embedding: {msPerEmbedding:F2} ms");
             Console.WriteLine($"Throughput: {embeddingsPerSecond:F1} embeddings/second");
 
-            Assert.AreEqual(EmbeddingCount, results.Length);
+            Assert.Equal(EmbeddingCount, results.Length);
             foreach (float[] result in results)
             {
-                Assert.AreEqual(768, result.Length);
+                Assert.Equal(768, result.Length);
             }
         }
 
-        [TestMethod]
-        [DataRow(1, 0)]
-        [DataRow(2, 0)]
-        [DataRow(4, 0)]
-        [DataRow(2, 2)]
-        [DataRow(3, 2)]
-        [DataRow(4, 2)]
-        [DataRow(6, 2)]
-        [DataRow(6, 3)]
-        [DataRow(9, 2)]
+        [SkippableTheory]
+        [InlineData(1, 0)]
+        [InlineData(2, 0)]
+        [InlineData(4, 0)]
+        [InlineData(2, 2)]
+        [InlineData(3, 2)]
+        [InlineData(4, 2)]
+        [InlineData(6, 2)]
+        [InlineData(6, 3)]
+        [InlineData(9, 2)]
         public async Task PerformanceTest_ThreadsVsConcurrency(int concurrency, int intraOpThreads)
         {
             string modelsDir = GetModelDirectory();
@@ -174,10 +171,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             double embeddingsPerSecond = EmbeddingCount / timer.Elapsed.TotalSeconds;
             Console.WriteLine($"Total: {timer.ElapsedMilliseconds:N0} ms, Throughput: {embeddingsPerSecond:F1} embeddings/sec");
 
-            Assert.AreEqual(EmbeddingCount, results.Length);
+            Assert.Equal(EmbeddingCount, results.Length);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task PerformanceTest_MaxThroughput()
         {
             string modelsDir = GetModelDirectory();
@@ -221,14 +218,14 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             Console.WriteLine($"Per embedding: {timer.Elapsed.TotalMilliseconds / count:F2} ms");
             Console.WriteLine($"Throughput: {embeddingsPerSecond:F1} embeddings/sec");
 
-            Assert.AreEqual(count, results.Length);
+            Assert.Equal(count, results.Length);
         }
 
-        [TestMethod]
-        [DataRow(0)]
-        [DataRow(2)]
-        [DataRow(3)]
-        [DataRow(4)]
+        [SkippableTheory]
+        [InlineData(0)]
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(4)]
         public async Task PerformanceTest_SweetSpotThroughput(int intraOpThreads)
         {
             string modelsDir = GetModelDirectory();
@@ -274,10 +271,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             Console.WriteLine($"Per embedding: {timer.Elapsed.TotalMilliseconds / count:F2} ms");
             Console.WriteLine($"Throughput: {embeddingsPerSecond:F1} embeddings/sec");
 
-            Assert.AreEqual(count, results.Length);
+            Assert.Equal(count, results.Length);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task PerformanceTest_ConcurrencyScaling()
         {
             string modelsDir = GetModelDirectory();
@@ -327,7 +324,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
                 Console.WriteLine($"Concurrency {concurrency}: {speedup:F2}x vs single worker");
             }
 
-            Assert.IsTrue(results[1] > 0);
+            Assert.True(results[1] > 0);
         }
     }
 }
