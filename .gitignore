@@ -486,3 +486,6 @@ tools/venv/
 
 # ONNX model files (too large for git, downloaded via tools/download-nomic-model.sh)
 *.onnx
+
+# Akin semantic search index
+.akin/
