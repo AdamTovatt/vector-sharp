@@ -1,5 +1,8 @@
 # VectorSharp
 
+[![Tests](https://github.com/AdamTovatt/vector-sharp/actions/workflows/dotnet.yml/badge.svg)](https://github.com/AdamTovatt/vector-sharp/actions/workflows/dotnet.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
 A high-performance .NET library for in-process vector similarity search and text embedding. No external services, no Docker, no infrastructure — just NuGet packages that work.
 
 ## Packages
