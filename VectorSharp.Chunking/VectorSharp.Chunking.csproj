@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+
+    <PackageId>VectorSharp.Chunking</PackageId>
+    <Version>1.0.0</Version>
+    <Title>VectorSharp.Chunking</Title>
+    <Authors>Adam Tovatt</Authors>
+    <Description>Streaming text chunker that splits text into token-bounded chunks suitable for embedding. Ships with predefined formats for Markdown and C#. Zero dependencies.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>vector;chunking;text-chunking;text-splitting;embedding;rag</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/AdamTovatt/vector-sharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VectorSharp.Chunking.Tests" />
+  </ItemGroup>
+
+</Project>
