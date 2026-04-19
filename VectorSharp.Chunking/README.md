@@ -16,7 +16,7 @@ dotnet add package VectorSharp.Chunking
 
 - **Stream-based** — reads character-by-character, never loads the full file into memory
 - **Token-bounded** — chunks respect a configurable token limit via your own token counter
-- **Format-aware** — ships with predefined break strings and stop signals for Markdown and C#
+- **Format-aware** — ships with predefined break strings and stop signals for Markdown, C#, JavaScript/TypeScript/JSX/TSX, HTML, CSS, Python, and generic plain text
 - **Round-trip safe** — concatenating all chunks reproduces the original text exactly
 - **Stop signals** — headings, code blocks, and other structural elements always start a new chunk
 - **Zero dependencies** — pure text processing, no embedding or tokenizer dependency
@@ -67,13 +67,49 @@ Splits at headings, paragraphs, list items, code blocks, and sentence boundaries
 
 ### C#
 
-Splits at blank lines, braces, indentation boundaries, and statement endings. Stop signals ensure namespace declarations, class declarations, and XML doc comments start a new chunk.
+Splits at blank lines, braces, and statement endings. Stop signals ensure XML doc comments start a new chunk, which naturally aligns chunks with public API members.
 
 ```csharp
 ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter, new ChunkReaderOptions
 {
     BreakStrings = BreakStrings.CSharp,
     StopSignals = StopSignals.CSharp
+});
+```
+
+### JavaScript / TypeScript / JSX / TSX
+
+Splits at blank lines, braces, and statement endings. Stop signals ensure JSDoc blocks start a new chunk. The same predefined set applies to all four variants since they share the same block and statement syntax.
+
+```csharp
+ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter, new ChunkReaderOptions
+{
+    BreakStrings = BreakStrings.JavaScript,
+    StopSignals = StopSignals.JavaScript
+});
+```
+
+### HTML
+
+Splits at paragraph, line, and sentence boundaries. Stop signals ensure `<h1>`, `<h2>`, and `<h3>` tags start a new chunk, aligning chunks with document sections.
+
+### CSS
+
+Splits at rule boundaries (closing brace on its own line), blank lines, and statement endings. Stop signals ensure `@media`, `@keyframes`, `@import`, and `@supports` at-rules start a new chunk.
+
+### Python
+
+Python is whitespace-significant, so break strings are limited to paragraph, line, and sentence boundaries. Stop signals carry the structural load: `def`, `async def`, and `class` force a new chunk, which aligns chunks with function and class boundaries (including indented methods).
+
+### Plain Text
+
+A generic fallback with paragraph, line, and sentence break strings and no stop signals. Suitable for any text-like format without language-specific structure.
+
+```csharp
+ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter, new ChunkReaderOptions
+{
+    BreakStrings = BreakStrings.PlainText,
+    StopSignals = StopSignals.PlainText
 });
 ```
 
@@ -141,9 +177,9 @@ public sealed class ChunkReader
 ```csharp
 public sealed class ChunkReaderOptions
 {
-    public int MaxTokensPerChunk { get; init; }   // default: 300
-    public string[] BreakStrings { get; init; }   // default: BreakStrings.Markdown
-    public string[] StopSignals { get; init; }    // default: StopSignals.Markdown
+    public int MaxTokensPerChunk { get; init; }                  // default: 300
+    public IReadOnlyList<string> BreakStrings { get; init; }     // default: BreakStrings.Markdown
+    public IReadOnlyList<string> StopSignals { get; init; }      // default: StopSignals.Markdown
 }
 ```
 
@@ -152,8 +188,13 @@ public sealed class ChunkReaderOptions
 ```csharp
 public static class BreakStrings
 {
-    public static readonly string[] Markdown;  // 16 break strings
-    public static readonly string[] CSharp;    // 11 break strings
+    public static readonly IReadOnlyList<string> Markdown;    // 16 entries
+    public static readonly IReadOnlyList<string> CSharp;      // 5 entries
+    public static readonly IReadOnlyList<string> JavaScript;  // 5 entries
+    public static readonly IReadOnlyList<string> Html;        // 3 entries
+    public static readonly IReadOnlyList<string> Css;         // 4 entries
+    public static readonly IReadOnlyList<string> Python;      // 3 entries
+    public static readonly IReadOnlyList<string> PlainText;   // 5 entries
 }
 ```
 
@@ -162,8 +203,13 @@ public static class BreakStrings
 ```csharp
 public static class StopSignals
 {
-    public static readonly string[] Markdown;  // 8 stop signals
-    public static readonly string[] CSharp;    // 7 stop signals
+    public static readonly IReadOnlyList<string> Markdown;    // 8 entries
+    public static readonly IReadOnlyList<string> CSharp;      // 1 entry
+    public static readonly IReadOnlyList<string> JavaScript;  // 1 entry
+    public static readonly IReadOnlyList<string> Html;        // 3 entries
+    public static readonly IReadOnlyList<string> Css;         // 4 entries
+    public static readonly IReadOnlyList<string> Python;      // 3 entries
+    public static readonly IReadOnlyList<string> PlainText;   // 0 entries
 }
 ```
 

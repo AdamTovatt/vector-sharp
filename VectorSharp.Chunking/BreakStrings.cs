@@ -48,5 +48,69 @@ namespace VectorSharp.Chunking
             "\n",
             "; "
         });
+
+        /// <summary>
+        /// Break strings for generic plain text. Uses paragraph, line, and sentence boundaries.
+        /// Suitable as a fallback for any text-like format without language-specific structure.
+        /// </summary>
+        public static readonly IReadOnlyList<string> PlainText = Array.AsReadOnly(new string[]
+        {
+            "\n\n",
+            "\n",
+            ". ",
+            "! ",
+            "? "
+        });
+
+        /// <summary>
+        /// Break strings optimized for JavaScript, TypeScript, JSX, and TSX source code.
+        /// Prioritizes structural boundaries (blank lines, braces) over statement boundaries.
+        /// Indentation-agnostic. The same boundaries are appropriate across all four variants
+        /// since they share the same block and statement syntax.
+        /// </summary>
+        public static readonly IReadOnlyList<string> JavaScript = Array.AsReadOnly(new string[]
+        {
+            "\n\n",
+            "\n{",
+            "\n}",
+            "\n",
+            "; "
+        });
+
+        /// <summary>
+        /// Break strings optimized for HTML content. Uses paragraph, line, and sentence
+        /// boundaries. Structural tag boundaries are handled via stop signals rather than
+        /// break strings so the opening tag appears at the start of the new chunk.
+        /// </summary>
+        public static readonly IReadOnlyList<string> Html = Array.AsReadOnly(new string[]
+        {
+            "\n\n",
+            "\n",
+            ". "
+        });
+
+        /// <summary>
+        /// Break strings optimized for CSS source code. Prioritizes rule boundaries
+        /// (closing brace on its own line) over statement boundaries (semicolons).
+        /// </summary>
+        public static readonly IReadOnlyList<string> Css = Array.AsReadOnly(new string[]
+        {
+            "\n\n",
+            "}\n",
+            "\n",
+            "; "
+        });
+
+        /// <summary>
+        /// Break strings optimized for Python source code. Python is whitespace-significant
+        /// and lacks brace delimiters, so structural boundaries are handled via stop signals
+        /// (def, class) rather than break strings.
+        /// </summary>
+        public static readonly IReadOnlyList<string> Python = Array.AsReadOnly(new string[]
+        {
+            "\n\n",
+            "\n",
+            ". "
+        });
     }
 }
