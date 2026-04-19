@@ -2,10 +2,9 @@ using System.Runtime.CompilerServices;
 
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class BinaryFormatTests
     {
-        [TestMethod]
+        [Fact]
         public void WriteHeader_ReadHeader_RoundTrip()
         {
             using MemoryStream stream = new MemoryStream();
@@ -15,12 +14,12 @@ namespace VectorSharp.Storage.Tests
             stream.Position = 0;
             (int dimension, int keySize, int recordCount) = BinaryFormat.ReadHeader(stream);
 
-            Assert.AreEqual(768, dimension);
-            Assert.AreEqual(16, keySize);
-            Assert.AreEqual(100, recordCount);
+            Assert.Equal(768, dimension);
+            Assert.Equal(16, keySize);
+            Assert.Equal(100, recordCount);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteRecord_ReadRecord_RoundTrip_Guid()
         {
             using MemoryStream stream = new MemoryStream();
@@ -33,14 +32,14 @@ namespace VectorSharp.Storage.Tests
             stream.Position = 0;
             (byte readStatus, Guid readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<Guid>(stream, 3);
 
-            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
+            Assert.Equal(BinaryFormat.RecordStatusActive, readStatus);
 
-            Assert.AreEqual(key, readKey);
-            Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
-            CollectionAssert.AreEqual(values, readValues);
+            Assert.Equal(key, readKey);
+            TestHelpers.AssertApproximatelyEqual(magnitude, readMagnitude, 0.0001f);
+            Assert.Equal(values, readValues);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteRecord_ReadRecord_RoundTrip_Int()
         {
             using MemoryStream stream = new MemoryStream();
@@ -53,14 +52,14 @@ namespace VectorSharp.Storage.Tests
             stream.Position = 0;
             (byte readStatus, int readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<int>(stream, 2);
 
-            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
+            Assert.Equal(BinaryFormat.RecordStatusActive, readStatus);
 
-            Assert.AreEqual(key, readKey);
-            Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
-            CollectionAssert.AreEqual(values, readValues);
+            Assert.Equal(key, readKey);
+            TestHelpers.AssertApproximatelyEqual(magnitude, readMagnitude, 0.0001f);
+            Assert.Equal(values, readValues);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteRecord_ReadRecord_RoundTrip_Long()
         {
             using MemoryStream stream = new MemoryStream();
@@ -73,49 +72,49 @@ namespace VectorSharp.Storage.Tests
             stream.Position = 0;
             (byte readStatus, long readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<long>(stream, 4);
 
-            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
+            Assert.Equal(BinaryFormat.RecordStatusActive, readStatus);
 
-            Assert.AreEqual(key, readKey);
-            Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
-            CollectionAssert.AreEqual(values, readValues);
+            Assert.Equal(key, readKey);
+            TestHelpers.AssertApproximatelyEqual(magnitude, readMagnitude, 0.0001f);
+            Assert.Equal(values, readValues);
         }
 
-        [TestMethod]
+        [Fact]
         public void HeaderSize_IsCorrect()
         {
-            Assert.AreEqual(20, BinaryFormat.HeaderSize);
+            Assert.Equal(20, BinaryFormat.HeaderSize);
         }
 
-        [TestMethod]
+        [Fact]
         public void RecordSize_CalculationIsCorrect()
         {
             int guidKeySize = Unsafe.SizeOf<Guid>(); // 16
             int intKeySize = Unsafe.SizeOf<int>();    // 4
 
             // Guid key, 768 dimensions: 1 + 16 + 4 + 768*4 = 3093
-            Assert.AreEqual(1 + 16 + 4 + 768 * 4, BinaryFormat.CalculateRecordSize(guidKeySize, 768));
+            Assert.Equal(1 + 16 + 4 + 768 * 4, BinaryFormat.CalculateRecordSize(guidKeySize, 768));
 
             // Int key, 3 dimensions: 1 + 4 + 4 + 3*4 = 21
-            Assert.AreEqual(1 + 4 + 4 + 3 * 4, BinaryFormat.CalculateRecordSize(intKeySize, 3));
+            Assert.Equal(1 + 4 + 4 + 3 * 4, BinaryFormat.CalculateRecordSize(intKeySize, 3));
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadHeader_InvalidMagicNumber_Throws()
         {
             using MemoryStream stream = new MemoryStream(new byte[20]);
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+            Assert.Throws<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadHeader_TooShort_Throws()
         {
             using MemoryStream stream = new MemoryStream(new byte[5]);
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+            Assert.Throws<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadHeader_UnsupportedVersion_Throws()
         {
             using MemoryStream stream = new MemoryStream();
@@ -130,10 +129,10 @@ namespace VectorSharp.Storage.Tests
             stream.Write(header);
             stream.Position = 0;
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+            Assert.Throws<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadHeader_NegativeDimension_Throws()
         {
             using MemoryStream stream = new MemoryStream();
@@ -148,10 +147,10 @@ namespace VectorSharp.Storage.Tests
             stream.Write(header);
             stream.Position = 0;
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+            Assert.Throws<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadHeader_NegativeRecordCount_Throws()
         {
             using MemoryStream stream = new MemoryStream();
@@ -166,7 +165,7 @@ namespace VectorSharp.Storage.Tests
             stream.Write(header);
             stream.Position = 0;
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+            Assert.Throws<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }
     }
 }

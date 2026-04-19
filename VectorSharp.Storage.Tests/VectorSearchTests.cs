@@ -1,11 +1,10 @@
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class VectorSearchTests
     {
         private const int DefaultDimension = 128;
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_SingleStore_ReturnsSameAsDirectSearch()
         {
             using CosineVectorStore<Guid> store = await TestHelpers.CreatePopulatedStoreAsync("store-a", DefaultDimension, 20);
@@ -14,15 +13,15 @@ namespace VectorSharp.Storage.Tests
             IReadOnlyList<SearchResult<Guid>> directResults = await store.FindMostSimilarAsync(query, 5);
             IReadOnlyList<SearchResult<Guid>> searchResults = await VectorSearch.SearchAsync(query, 5, store);
 
-            Assert.AreEqual(directResults.Count, searchResults.Count);
+            Assert.Equal(directResults.Count, searchResults.Count);
             for (int i = 0; i < directResults.Count; i++)
             {
-                Assert.AreEqual(directResults[i].Id, searchResults[i].Id);
-                Assert.AreEqual(directResults[i].Score, searchResults[i].Score, 0.0001f);
+                Assert.Equal(directResults[i].Id, searchResults[i].Id);
+                TestHelpers.AssertApproximatelyEqual(directResults[i].Score, searchResults[i].Score, 0.0001f);
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_MultipleStores_MergesByScore()
         {
             using CosineVectorStore<Guid> storeA = new CosineVectorStore<Guid>("store-a", DefaultDimension);
@@ -39,12 +38,12 @@ namespace VectorSharp.Storage.Tests
 
             IReadOnlyList<SearchResult<Guid>> results = await VectorSearch.SearchAsync(query, 3, storeA, storeB);
 
-            Assert.AreEqual(3, results.Count);
-            Assert.AreEqual(bestId, results[0].Id);
-            Assert.AreEqual("store-b", results[0].StoreName);
+            Assert.Equal(3, results.Count);
+            Assert.Equal(bestId, results[0].Id);
+            Assert.Equal("store-b", results[0].StoreName);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_RespectsCount()
         {
             using CosineVectorStore<Guid> storeA = await TestHelpers.CreatePopulatedStoreAsync("store-a", DefaultDimension, 10);
@@ -53,10 +52,10 @@ namespace VectorSharp.Storage.Tests
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension, seed: 500);
             IReadOnlyList<SearchResult<Guid>> results = await VectorSearch.SearchAsync(query, 5, storeA, storeB);
 
-            Assert.AreEqual(5, results.Count);
+            Assert.Equal(5, results.Count);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_ResultsAreSortedDescending()
         {
             using CosineVectorStore<Guid> storeA = await TestHelpers.CreatePopulatedStoreAsync("store-a", DefaultDimension, 20);
@@ -67,12 +66,12 @@ namespace VectorSharp.Storage.Tests
 
             for (int i = 1; i < results.Count; i++)
             {
-                Assert.IsTrue(results[i - 1].Score >= results[i].Score,
+                Assert.True(results[i - 1].Score >= results[i].Score,
                     $"Results not sorted at index {i}: {results[i - 1].Score} vs {results[i].Score}");
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_ResultsIncludeCorrectStoreName()
         {
             using CosineVectorStore<Guid> storeA = new CosineVectorStore<Guid>("alpha", DefaultDimension);
@@ -84,13 +83,13 @@ namespace VectorSharp.Storage.Tests
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension, seed: 500);
             IReadOnlyList<SearchResult<Guid>> results = await VectorSearch.SearchAsync(query, 10, storeA, storeB);
 
-            Assert.AreEqual(2, results.Count);
+            Assert.Equal(2, results.Count);
             HashSet<string> storeNames = new HashSet<string>(results.Select(r => r.StoreName));
-            Assert.IsTrue(storeNames.Contains("alpha"));
-            Assert.IsTrue(storeNames.Contains("beta"));
+            Assert.Contains("alpha", storeNames);
+            Assert.Contains("beta", storeNames);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_EmptyStores_ReturnsEmpty()
         {
             using CosineVectorStore<Guid> storeA = new CosineVectorStore<Guid>("store-a", DefaultDimension);
@@ -99,39 +98,39 @@ namespace VectorSharp.Storage.Tests
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension);
             IReadOnlyList<SearchResult<Guid>> results = await VectorSearch.SearchAsync(query, 10, storeA, storeB);
 
-            Assert.AreEqual(0, results.Count);
+            Assert.Empty(results);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_ZeroCount_Throws()
         {
             using CosineVectorStore<Guid> store = await TestHelpers.CreatePopulatedStoreAsync("store", DefaultDimension, 10);
 
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension);
 
-            await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(() =>
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
                 VectorSearch.SearchAsync(query, 0, store));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_NullQuery_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>("store", DefaultDimension);
 
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 VectorSearch.SearchAsync<Guid>(null!, 10, store));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_NoStores_Throws()
         {
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension);
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+            await Assert.ThrowsAsync<ArgumentException>(() =>
                 VectorSearch.SearchAsync<Guid>(query, 10));
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SearchAsync_MixedInMemoryAndDisk_WorksTogether()
         {
             string filePath = Path.Combine(Path.GetTempPath(), $"vectorsharp_test_{Guid.NewGuid()}.dat");
@@ -147,9 +146,9 @@ namespace VectorSharp.Storage.Tests
                 IReadOnlyList<SearchResult<int>> results = await VectorSearch.SearchAsync(
                     bestVector, 2, memStore, diskStore);
 
-                Assert.AreEqual(2, results.Count);
-                Assert.AreEqual(1, results[0].Id); // best match is in memory store
-                Assert.AreEqual("memory", results[0].StoreName);
+                Assert.Equal(2, results.Count);
+                Assert.Equal(1, results[0].Id); // best match is in memory store
+                Assert.Equal("memory", results[0].StoreName);
             }
             finally
             {

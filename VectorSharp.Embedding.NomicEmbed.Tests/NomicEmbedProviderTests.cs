@@ -3,9 +3,7 @@ using VectorSharp.Embedding.NomicEmbed;
 
 namespace VectorSharp.Embedding.NomicEmbed.Tests
 {
-    [TestClass]
-    [TestCategory("RequiresModel")]
-    [DoNotParallelize]
+    [Trait("Category", "RequiresModel")]
     public class NomicEmbedProviderTests
     {
         private static string GetModelDirectory()
@@ -13,29 +11,28 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             string assemblyDir = Path.GetDirectoryName(typeof(NomicEmbedProviderTests).Assembly.Location)!;
             string modelsDir = Path.Combine(assemblyDir, "Models");
 
-            if (!Directory.Exists(modelsDir) || !File.Exists(Path.Combine(modelsDir, "model_int8.onnx")))
-            {
-                Assert.Inconclusive("Model files not found. Run tools/download-nomic-model.sh first.");
-            }
+            Skip.IfNot(
+                Directory.Exists(modelsDir) && File.Exists(Path.Combine(modelsDir, "model_int8.onnx")),
+                "Model files not found. Run tools/download-nomic-model.sh first.");
 
             return modelsDir;
         }
 
         #region Factory
 
-        [TestMethod]
+        [SkippableFact]
         public void Create_CustomPath_Succeeds()
         {
             string modelsDir = GetModelDirectory();
             using NomicEmbedProvider provider = NomicEmbedProvider.Create(modelsDir);
 
-            Assert.AreEqual(768, provider.Dimension);
+            Assert.Equal(768, provider.Dimension);
         }
 
-        [TestMethod]
+        [Fact]
         public void Create_InvalidPath_Throws()
         {
-            Assert.ThrowsExactly<DirectoryNotFoundException>(() =>
+            Assert.Throws<DirectoryNotFoundException>(() =>
                 NomicEmbedProvider.Create("/nonexistent/path"));
         }
 
@@ -43,7 +40,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
         #region Embedding
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_ShortText_ReturnsVector768()
         {
             string modelsDir = GetModelDirectory();
@@ -51,10 +48,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             float[] result = await provider.EmbedAsync("hello world");
 
-            Assert.AreEqual(768, result.Length);
+            Assert.Equal(768, result.Length);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_SameText_ReturnsSameVector()
         {
             string modelsDir = GetModelDirectory();
@@ -63,10 +60,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             float[] result1 = await provider.EmbedAsync("deterministic test");
             float[] result2 = await provider.EmbedAsync("deterministic test");
 
-            CollectionAssert.AreEqual(result1, result2);
+            Assert.Equal(result1, result2);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_DifferentTexts_ReturnsDifferentVectors()
         {
             string modelsDir = GetModelDirectory();
@@ -75,10 +72,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             float[] result1 = await provider.EmbedAsync("cats are great");
             float[] result2 = await provider.EmbedAsync("quantum physics equations");
 
-            CollectionAssert.AreNotEqual(result1, result2);
+            Assert.NotEqual(result1, result2);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_ResultIsL2Normalized()
         {
             string modelsDir = GetModelDirectory();
@@ -94,10 +91,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             magnitude = MathF.Sqrt(magnitude);
 
-            Assert.AreEqual(1.0f, magnitude, 0.001f);
+            TestHelpers.AssertApproximatelyEqual(1.0f, magnitude, 0.001f);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_EmptyString_ReturnsVector768()
         {
             string modelsDir = GetModelDirectory();
@@ -105,10 +102,10 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             float[] result = await provider.EmbedAsync("");
 
-            Assert.AreEqual(768, result.Length);
+            Assert.Equal(768, result.Length);
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_SimilarTexts_HaveHigherSimilarity()
         {
             string modelsDir = GetModelDirectory();
@@ -121,7 +118,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             float catKittenSimilarity = CosineSimilarity(catResult, kittenResult);
             float catMathSimilarity = CosineSimilarity(catResult, mathResult);
 
-            Assert.IsTrue(catKittenSimilarity > catMathSimilarity,
+            Assert.True(catKittenSimilarity > catMathSimilarity,
                 $"Cat-kitten similarity ({catKittenSimilarity:F4}) should be higher than cat-math ({catMathSimilarity:F4})");
         }
 
@@ -129,7 +126,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
         #region Task Prefix
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_QueryPurpose_ReturnsDifferentFromDocumentPurpose()
         {
             string modelsDir = GetModelDirectory();
@@ -138,14 +135,14 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             float[] docResult = await provider.EmbedAsync("test text", EmbeddingPurpose.Document);
             float[] queryResult = await provider.EmbedAsync("test text", EmbeddingPurpose.Query);
 
-            CollectionAssert.AreNotEqual(docResult, queryResult);
+            Assert.NotEqual(docResult, queryResult);
         }
 
         #endregion
 
         #region Integration with EmbeddingService
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbeddingService_WithNomicProvider_ProducesValidEmbeddings()
         {
             string modelsDir = GetModelDirectory();
@@ -153,24 +150,24 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
             await using EmbeddingService service = new EmbeddingService(
                 () => NomicEmbedProvider.Create(modelsDir));
 
-            Assert.AreEqual(768, service.Dimension);
+            Assert.Equal(768, service.Dimension);
 
             float[] result = await service.EmbedAsync("integration test");
-            Assert.AreEqual(768, result.Length);
+            Assert.Equal(768, result.Length);
         }
 
         #endregion
 
         #region Disposal
 
-        [TestMethod]
+        [SkippableFact]
         public async Task Dispose_ThenEmbed_Throws()
         {
             string modelsDir = GetModelDirectory();
             NomicEmbedProvider provider = NomicEmbedProvider.Create(modelsDir);
             provider.Dispose();
 
-            await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() =>
+            await Assert.ThrowsAsync<ObjectDisposedException>(() =>
                 provider.EmbedAsync("hello"));
         }
 
@@ -178,7 +175,7 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
         #region Reference Validation
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_HelloWorldDocument_MatchesPythonReference()
         {
             string modelsDir = GetModelDirectory();
@@ -203,19 +200,19 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                Assert.AreEqual(expectedFirst10[i], result[i], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedFirst10[i], result[i], tolerance,
                     $"Mismatch at index {i}: expected {expectedFirst10[i]:F6}, got {result[i]:F6}");
             }
 
             for (int i = 0; i < 5; i++)
             {
                 int idx = 768 - 5 + i;
-                Assert.AreEqual(expectedLast5[i], result[idx], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedLast5[i], result[idx], tolerance,
                     $"Mismatch at index {idx}: expected {expectedLast5[i]:F6}, got {result[idx]:F6}");
             }
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_HelloWorldQuery_MatchesPythonReference()
         {
             string modelsDir = GetModelDirectory();
@@ -240,19 +237,19 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                Assert.AreEqual(expectedFirst10[i], result[i], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedFirst10[i], result[i], tolerance,
                     $"Mismatch at index {i}: expected {expectedFirst10[i]:F6}, got {result[i]:F6}");
             }
 
             for (int i = 0; i < 5; i++)
             {
                 int idx = 768 - 5 + i;
-                Assert.AreEqual(expectedLast5[i], result[idx], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedLast5[i], result[idx], tolerance,
                     $"Mismatch at index {idx}: expected {expectedLast5[i]:F6}, got {result[idx]:F6}");
             }
         }
 
-        [TestMethod]
+        [SkippableFact]
         public async Task EmbedAsync_FoxSentence_MatchesPythonReference()
         {
             string modelsDir = GetModelDirectory();
@@ -277,14 +274,14 @@ namespace VectorSharp.Embedding.NomicEmbed.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                Assert.AreEqual(expectedFirst10[i], result[i], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedFirst10[i], result[i], tolerance,
                     $"Mismatch at index {i}: expected {expectedFirst10[i]:F6}, got {result[i]:F6}");
             }
 
             for (int i = 0; i < 5; i++)
             {
                 int idx = 768 - 5 + i;
-                Assert.AreEqual(expectedLast5[i], result[idx], tolerance,
+                TestHelpers.AssertApproximatelyEqual(expectedLast5[i], result[idx], tolerance,
                     $"Mismatch at index {idx}: expected {expectedLast5[i]:F6}, got {result[idx]:F6}");
             }
         }

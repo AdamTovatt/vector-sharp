@@ -2,7 +2,6 @@ using System.Diagnostics;
 
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class CosineVectorStorePerformanceTests
     {
         #region Constants
@@ -48,7 +47,7 @@ namespace VectorSharp.Storage.Tests
 
         #endregion
 
-        [TestMethod]
+        [Fact]
         public async Task PerformanceTest_LargeDatasetOperations()
         {
             Console.WriteLine($"=== Performance Test with {LargeDatasetSize:N0} vectors ===");
@@ -136,7 +135,7 @@ namespace VectorSharp.Storage.Tests
             foreach (float[] query in searchQueries)
             {
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(query, 10);
-                Assert.IsTrue(results.Count > 0);
+                Assert.True(results.Count > 0);
             }
 
             searchTimer.Stop();
@@ -153,7 +152,7 @@ namespace VectorSharp.Storage.Tests
             foreach (float[] query in searchQueries)
             {
                 IReadOnlyList<SearchResult<Guid>> results = await loadedStore.FindMostSimilarAsync(query, 10);
-                Assert.IsTrue(results.Count > 0);
+                Assert.True(results.Count > 0);
             }
 
             loadedSearchTimer.Stop();
@@ -175,14 +174,14 @@ namespace VectorSharp.Storage.Tests
 
             Console.WriteLine("\n=== Performance Test Complete ===");
 
-            Assert.AreEqual(LargeDatasetSize, store.Count);
-            Assert.IsTrue(insertionTimeMs > 0);
-            Assert.IsTrue(saveTimeMs > 0);
-            Assert.IsTrue(loadTimeMs > 0);
-            Assert.IsTrue(searchTimeMs > 0);
+            Assert.Equal(LargeDatasetSize, store.Count);
+            Assert.True(insertionTimeMs > 0);
+            Assert.True(saveTimeMs > 0);
+            Assert.True(loadTimeMs > 0);
+            Assert.True(searchTimeMs > 0);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task PerformanceTest_MemoryUsage()
         {
             Console.WriteLine($"=== Memory Usage Test with {LargeDatasetSize:N0} vectors ===");
@@ -207,7 +206,7 @@ namespace VectorSharp.Storage.Tests
             foreach (float[] query in searchQueries)
             {
                 IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(query, 10);
-                Assert.IsTrue(results.Count > 0);
+                Assert.True(results.Count > 0);
             }
 
             long afterSearchMemory = GC.GetTotalMemory(true);
@@ -228,10 +227,10 @@ namespace VectorSharp.Storage.Tests
 
             Console.WriteLine("=== Memory Usage Test Complete ===");
 
-            Assert.IsTrue(populatedMemory > initialMemory);
+            Assert.True(populatedMemory > initialMemory);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task PerformanceTest_ConcurrentOperations()
         {
             Console.WriteLine($"=== Concurrent Operations Test with {LargeDatasetSize:N0} vectors ===");
@@ -277,7 +276,7 @@ namespace VectorSharp.Storage.Tests
                 concurrentSearchTasks.Add(Task.Run(async () =>
                 {
                     IReadOnlyList<SearchResult<Guid>> results = await concurrentStore.FindMostSimilarAsync(query, 10);
-                    Assert.IsTrue(results.Count > 0);
+                    Assert.True(results.Count > 0);
                 }));
             }
 
@@ -306,7 +305,7 @@ namespace VectorSharp.Storage.Tests
             foreach (float[] query in searchQueries)
             {
                 IReadOnlyList<SearchResult<Guid>> results = await sequentialStore.FindMostSimilarAsync(query, 10);
-                Assert.IsTrue(results.Count > 0);
+                Assert.True(results.Count > 0);
             }
 
             sequentialSearchTimer.Stop();
@@ -325,13 +324,13 @@ namespace VectorSharp.Storage.Tests
 
             Console.WriteLine("\n=== Concurrent Operations Test Complete ===");
 
-            Assert.IsTrue(concurrentInsertionTimeMs > 0);
-            Assert.IsTrue(concurrentSearchTimeMs > 0);
-            Assert.IsTrue(sequentialInsertionTimeMs > 0);
-            Assert.IsTrue(sequentialSearchTimeMs > 0);
+            Assert.True(concurrentInsertionTimeMs > 0);
+            Assert.True(concurrentSearchTimeMs > 0);
+            Assert.True(sequentialInsertionTimeMs > 0);
+            Assert.True(sequentialSearchTimeMs > 0);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task PerformanceTest_DiskVsInMemory()
         {
             Console.WriteLine($"=== Disk vs In-Memory Performance Test ===");
@@ -359,7 +358,7 @@ namespace VectorSharp.Storage.Tests
 
                 // Open disk store
                 using DiskVectorStore<Guid> diskStore = new DiskVectorStore<Guid>("disk", filePath, VectorDimension);
-                Assert.AreEqual(LargeDatasetSize, diskStore.Count);
+                Assert.Equal(LargeDatasetSize, diskStore.Count);
 
                 // In-memory search
                 Console.WriteLine("--- In-Memory Search ---");
@@ -367,7 +366,7 @@ namespace VectorSharp.Storage.Tests
                 foreach (float[] query in searchQueries)
                 {
                     IReadOnlyList<SearchResult<Guid>> results = await memStore.FindMostSimilarAsync(query, 10);
-                    Assert.IsTrue(results.Count > 0);
+                    Assert.True(results.Count > 0);
                 }
 
                 memTimer.Stop();
@@ -381,7 +380,7 @@ namespace VectorSharp.Storage.Tests
                 foreach (float[] query in searchQueries)
                 {
                     IReadOnlyList<SearchResult<Guid>> results = await diskStore.FindMostSimilarAsync(query, 10);
-                    Assert.IsTrue(results.Count > 0);
+                    Assert.True(results.Count > 0);
                 }
 
                 diskTimer.Stop();
@@ -400,8 +399,8 @@ namespace VectorSharp.Storage.Tests
                 float[] verifyQuery = searchQueries[0];
                 IReadOnlyList<SearchResult<Guid>> memResults = await memStore.FindMostSimilarAsync(verifyQuery, 1);
                 IReadOnlyList<SearchResult<Guid>> diskResults = await diskStore.FindMostSimilarAsync(verifyQuery, 1);
-                Assert.AreEqual(memResults[0].Id, diskResults[0].Id);
-                Assert.AreEqual(memResults[0].Score, diskResults[0].Score, 0.0001f);
+                Assert.Equal(memResults[0].Id, diskResults[0].Id);
+                TestHelpers.AssertApproximatelyEqual(memResults[0].Score, diskResults[0].Score, 0.0001f);
 
                 Console.WriteLine("\n=== Disk vs In-Memory Test Complete ===");
             }

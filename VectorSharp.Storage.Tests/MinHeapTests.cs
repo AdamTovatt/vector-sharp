@@ -1,20 +1,19 @@
 namespace VectorSharp.Storage.Tests
 {
-    [TestClass]
     public class MinHeapTests
     {
-        [TestMethod]
+        [Fact]
         public void Add_SingleItem_ReturnsIt()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
             heap.Add("item1", 0.5f);
 
-            Assert.AreEqual(1, heap.Count);
+            Assert.Equal(1, heap.Count);
             ReadOnlySpan<string> items = heap.GetItems();
-            Assert.AreEqual("item1", items[0]);
+            Assert.Equal("item1", items[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public void Add_BelowCapacity_ReturnsAllItems()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
@@ -22,11 +21,11 @@ namespace VectorSharp.Storage.Tests
             heap.Add("b", 0.2f);
             heap.Add("c", 0.3f);
 
-            Assert.AreEqual(3, heap.Count);
-            Assert.IsFalse(heap.IsFull);
+            Assert.Equal(3, heap.Count);
+            Assert.False(heap.IsFull);
         }
 
-        [TestMethod]
+        [Fact]
         public void Add_AtCapacity_ReplacesMinWhenHigherPriority()
         {
             MinHeap<string> heap = new MinHeap<string>(3);
@@ -34,18 +33,18 @@ namespace VectorSharp.Storage.Tests
             heap.Add("b", 0.2f);
             heap.Add("c", 0.3f);
 
-            Assert.IsTrue(heap.IsFull);
+            Assert.True(heap.IsFull);
 
             // Add item with higher priority than the current minimum
             heap.Add("d", 0.5f);
 
-            Assert.AreEqual(3, heap.Count);
+            Assert.Equal(3, heap.Count);
 
             // The minimum should no longer be 0.1
-            Assert.IsTrue(heap.MinPriority >= 0.2f);
+            Assert.True(heap.MinPriority >= 0.2f);
         }
 
-        [TestMethod]
+        [Fact]
         public void Add_AtCapacity_IgnoresWhenLowerPriority()
         {
             MinHeap<string> heap = new MinHeap<string>(3);
@@ -58,11 +57,11 @@ namespace VectorSharp.Storage.Tests
             // Add item with priority lower than the minimum
             heap.Add("d", 0.1f);
 
-            Assert.AreEqual(3, heap.Count);
-            Assert.AreEqual(minBefore, heap.MinPriority);
+            Assert.Equal(3, heap.Count);
+            Assert.Equal(minBefore, heap.MinPriority);
         }
 
-        [TestMethod]
+        [Fact]
         public void GetSortedDescending_ReturnsSortedByPriorityDescending()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
@@ -74,24 +73,24 @@ namespace VectorSharp.Storage.Tests
 
             (string Item, float Priority)[] sorted = heap.GetSortedDescending();
 
-            Assert.AreEqual(5, sorted.Length);
-            Assert.AreEqual("high", sorted[0].Item);
-            Assert.AreEqual(0.9f, sorted[0].Priority);
-            Assert.AreEqual("midhigh", sorted[1].Item);
-            Assert.AreEqual("mid", sorted[2].Item);
-            Assert.AreEqual("midlow", sorted[3].Item);
-            Assert.AreEqual("low", sorted[4].Item);
+            Assert.Equal(5, sorted.Length);
+            Assert.Equal("high", sorted[0].Item);
+            Assert.Equal(0.9f, sorted[0].Priority);
+            Assert.Equal("midhigh", sorted[1].Item);
+            Assert.Equal("mid", sorted[2].Item);
+            Assert.Equal("midlow", sorted[3].Item);
+            Assert.Equal("low", sorted[4].Item);
         }
 
-        [TestMethod]
+        [Fact]
         public void MinPriority_EmptyHeap_ReturnsMinValue()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
 
-            Assert.AreEqual(float.MinValue, heap.MinPriority);
+            Assert.Equal(float.MinValue, heap.MinPriority);
         }
 
-        [TestMethod]
+        [Fact]
         public void MinPriority_ReturnsSmallestPriority()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
@@ -99,49 +98,49 @@ namespace VectorSharp.Storage.Tests
             heap.Add("b", 0.2f);
             heap.Add("c", 0.8f);
 
-            Assert.AreEqual(0.2f, heap.MinPriority);
+            Assert.Equal(0.2f, heap.MinPriority);
         }
 
-        [TestMethod]
+        [Fact]
         public void IsFull_ReturnsTrueAtCapacity()
         {
             MinHeap<string> heap = new MinHeap<string>(2);
-            Assert.IsFalse(heap.IsFull);
+            Assert.False(heap.IsFull);
 
             heap.Add("a", 0.1f);
-            Assert.IsFalse(heap.IsFull);
+            Assert.False(heap.IsFull);
 
             heap.Add("b", 0.2f);
-            Assert.IsTrue(heap.IsFull);
+            Assert.True(heap.IsFull);
         }
 
-        [TestMethod]
+        [Fact]
         public void Empty_ReturnsNoItems()
         {
             MinHeap<string> heap = new MinHeap<string>(5);
 
-            Assert.AreEqual(0, heap.Count);
-            Assert.AreEqual(0, heap.GetItems().Length);
-            Assert.AreEqual(0, heap.GetSortedDescending().Length);
+            Assert.Equal(0, heap.Count);
+            Assert.Equal(0, heap.GetItems().Length);
+            Assert.Empty(heap.GetSortedDescending());
         }
 
-        [TestMethod]
+        [Fact]
         public void Capacity_One_WorksCorrectly()
         {
             MinHeap<string> heap = new MinHeap<string>(1);
             heap.Add("first", 0.3f);
-            Assert.IsTrue(heap.IsFull);
+            Assert.True(heap.IsFull);
 
             heap.Add("second", 0.5f);
-            Assert.AreEqual(1, heap.Count);
-            Assert.AreEqual("second", heap.GetItems()[0]);
+            Assert.Equal(1, heap.Count);
+            Assert.Equal("second", heap.GetItems()[0]);
 
             heap.Add("third", 0.1f);
-            Assert.AreEqual(1, heap.Count);
-            Assert.AreEqual("second", heap.GetItems()[0]);
+            Assert.Equal(1, heap.Count);
+            Assert.Equal("second", heap.GetItems()[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public void LargeCapacity_MaintainsCorrectTopK()
         {
             int capacity = 10;
@@ -153,16 +152,16 @@ namespace VectorSharp.Storage.Tests
                 heap.Add(i, i);
             }
 
-            Assert.AreEqual(capacity, heap.Count);
+            Assert.Equal(capacity, heap.Count);
 
             // The top 10 should be items 90-99
             (int Item, float Priority)[] sorted = heap.GetSortedDescending();
-            Assert.AreEqual(10, sorted.Length);
+            Assert.Equal(10, sorted.Length);
 
             for (int i = 0; i < 10; i++)
             {
-                Assert.AreEqual(99 - i, sorted[i].Item);
-                Assert.AreEqual(99 - i, sorted[i].Priority);
+                Assert.Equal(99 - i, sorted[i].Item);
+                Assert.Equal(99 - i, sorted[i].Priority);
             }
         }
     }
