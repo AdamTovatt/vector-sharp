@@ -1,8 +1,15 @@
 <Project>
+  <!--
+    Use <Content> (not <None>) so the model files survive `dotnet publish`,
+    including self-contained single-file publishes. <None> items with
+    CopyToOutputDirectory copy to the build output but are not included in
+    publish output for single-file scenarios.
+  -->
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)..\contentFiles\any\net10.0\Models\**\*"
-          CopyToOutputDirectory="PreserveNewest"
-          Link="Models\%(RecursiveDir)%(Filename)%(Extension)"
-          Visible="false" />
+    <Content Include="$(MSBuildThisFileDirectory)..\contentFiles\any\net10.0\Models\**\*"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Link="Models\%(RecursiveDir)%(Filename)%(Extension)"
+             Visible="false" />
   </ItemGroup>
 </Project>
