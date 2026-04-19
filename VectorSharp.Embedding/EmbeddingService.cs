@@ -13,7 +13,7 @@ namespace VectorSharp.Embedding
         private readonly Task[] _workerTasks;
         private readonly IEmbeddingProvider[] _providers;
         private readonly CancellationTokenSource _cts;
-        private bool _disposed;
+        private int _disposed;
 
         /// <summary>
         /// Gets the dimensionality of the embedding vectors produced by this service.
@@ -81,7 +81,7 @@ namespace VectorSharp.Embedding
         /// <exception cref="ObjectDisposedException">Thrown when the service has been disposed.</exception>
         public async Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
             ArgumentNullException.ThrowIfNull(text);
 
             TaskCompletionSource<float[]> tcs = new TaskCompletionSource<float[]>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -93,7 +93,15 @@ namespace VectorSharp.Embedding
             }
 
             EmbeddingRequest request = new EmbeddingRequest { Text = text, Purpose = purpose, CompletionSource = tcs };
-            await _channel.Writer.WriteAsync(request, cancellationToken);
+
+            try
+            {
+                await _channel.Writer.WriteAsync(request, cancellationToken);
+            }
+            catch (ChannelClosedException)
+            {
+                throw new ObjectDisposedException(GetType().FullName);
+            }
 
             try
             {
@@ -117,7 +125,7 @@ namespace VectorSharp.Embedding
         /// <exception cref="ObjectDisposedException">Thrown when the service has been disposed.</exception>
         public async Task<float[][]> EmbedBatchAsync(IReadOnlyList<string> texts, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
             ArgumentNullException.ThrowIfNull(texts);
 
             if (texts.Count == 0)
@@ -137,10 +145,8 @@ namespace VectorSharp.Embedding
         /// </summary>
         public async ValueTask DisposeAsync()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) == 1)
                 return;
-
-            _disposed = true;
 
             // Signal no more items
             _channel.Writer.TryComplete();

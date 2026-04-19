@@ -30,7 +30,7 @@ namespace VectorSharp.Storage
                 throw new ArgumentException("At least one store must be provided.", nameof(stores));
 
             if (count <= 0)
-                return Array.Empty<SearchResult<TKey>>();
+                throw new ArgumentOutOfRangeException(nameof(count), "Count must be positive.");
 
             // Query all stores in parallel
             Task<IReadOnlyList<SearchResult<TKey>>>[] tasks =
@@ -54,14 +54,7 @@ namespace VectorSharp.Storage
             }
 
             // Return sorted descending
-            (SearchResult<TKey> Item, float Priority)[] sorted = heap.GetSortedDescending();
-            SearchResult<TKey>[] finalResults = new SearchResult<TKey>[sorted.Length];
-            for (int i = 0; i < sorted.Length; i++)
-            {
-                finalResults[i] = sorted[i].Item;
-            }
-
-            return finalResults;
+            return heap.ExtractSortedResults();
         }
     }
 }

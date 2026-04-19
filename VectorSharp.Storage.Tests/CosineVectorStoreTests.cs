@@ -163,14 +163,13 @@ namespace VectorSharp.Storage.Tests
         }
 
         [TestMethod]
-        public async Task FindMostSimilarAsync_NullQuery_ReturnsEmpty()
+        public async Task FindMostSimilarAsync_NullQuery_Throws()
         {
             using CosineVectorStore<Guid> store = new CosineVectorStore<Guid>(DefaultName, DefaultDimension);
             await store.AddAsync(Guid.NewGuid(), TestHelpers.CreateRandomVector(DefaultDimension));
 
-            IReadOnlyList<SearchResult<Guid>> results = await store.FindMostSimilarAsync(null!, 10);
-
-            Assert.AreEqual(0, results.Count);
+            await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+                store.FindMostSimilarAsync(null!, 10));
         }
 
         [TestMethod]

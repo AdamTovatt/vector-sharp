@@ -31,7 +31,9 @@ namespace VectorSharp.Storage.Tests
             BinaryFormat.WriteRecord(stream, key, magnitude, values.AsSpan());
 
             stream.Position = 0;
-            (Guid readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<Guid>(stream, 3);
+            (byte readStatus, Guid readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<Guid>(stream, 3);
+
+            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
 
             Assert.AreEqual(key, readKey);
             Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
@@ -49,7 +51,9 @@ namespace VectorSharp.Storage.Tests
             BinaryFormat.WriteRecord(stream, key, magnitude, values.AsSpan());
 
             stream.Position = 0;
-            (int readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<int>(stream, 2);
+            (byte readStatus, int readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<int>(stream, 2);
+
+            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
 
             Assert.AreEqual(key, readKey);
             Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
@@ -67,7 +71,9 @@ namespace VectorSharp.Storage.Tests
             BinaryFormat.WriteRecord(stream, key, magnitude, values.AsSpan());
 
             stream.Position = 0;
-            (long readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<long>(stream, 4);
+            (byte readStatus, long readKey, float readMagnitude, float[] readValues) = BinaryFormat.ReadRecord<long>(stream, 4);
+
+            Assert.AreEqual(BinaryFormat.RecordStatusActive, readStatus);
 
             Assert.AreEqual(key, readKey);
             Assert.AreEqual(magnitude, readMagnitude, 0.0001f);
@@ -86,11 +92,11 @@ namespace VectorSharp.Storage.Tests
             int guidKeySize = Unsafe.SizeOf<Guid>(); // 16
             int intKeySize = Unsafe.SizeOf<int>();    // 4
 
-            // Guid key, 768 dimensions: 16 + 4 + 768*4 = 3092
-            Assert.AreEqual(16 + 4 + 768 * 4, BinaryFormat.CalculateRecordSize(guidKeySize, 768));
+            // Guid key, 768 dimensions: 1 + 16 + 4 + 768*4 = 3093
+            Assert.AreEqual(1 + 16 + 4 + 768 * 4, BinaryFormat.CalculateRecordSize(guidKeySize, 768));
 
-            // Int key, 3 dimensions: 4 + 4 + 3*4 = 20
-            Assert.AreEqual(4 + 4 + 3 * 4, BinaryFormat.CalculateRecordSize(intKeySize, 3));
+            // Int key, 3 dimensions: 1 + 4 + 4 + 3*4 = 21
+            Assert.AreEqual(1 + 4 + 4 + 3 * 4, BinaryFormat.CalculateRecordSize(intKeySize, 3));
         }
 
         [TestMethod]
@@ -105,6 +111,60 @@ namespace VectorSharp.Storage.Tests
         public void ReadHeader_TooShort_Throws()
         {
             using MemoryStream stream = new MemoryStream(new byte[5]);
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+        }
+
+        [TestMethod]
+        public void ReadHeader_UnsupportedVersion_Throws()
+        {
+            using MemoryStream stream = new MemoryStream();
+
+            Span<byte> header = stackalloc byte[BinaryFormat.HeaderSize];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[..2], BinaryFormat.MagicNumber);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[2..4], 99); // future version
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[4..8], 768);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[8..12], 16);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[12..16], 0);
+            header[16..20].Clear();
+            stream.Write(header);
+            stream.Position = 0;
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+        }
+
+        [TestMethod]
+        public void ReadHeader_NegativeDimension_Throws()
+        {
+            using MemoryStream stream = new MemoryStream();
+
+            Span<byte> header = stackalloc byte[BinaryFormat.HeaderSize];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[..2], BinaryFormat.MagicNumber);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[2..4], BinaryFormat.CurrentVersion);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[4..8], -1); // negative dimension
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[8..12], 16);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[12..16], 0);
+            header[16..20].Clear();
+            stream.Write(header);
+            stream.Position = 0;
+
+            Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
+        }
+
+        [TestMethod]
+        public void ReadHeader_NegativeRecordCount_Throws()
+        {
+            using MemoryStream stream = new MemoryStream();
+
+            Span<byte> header = stackalloc byte[BinaryFormat.HeaderSize];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[..2], BinaryFormat.MagicNumber);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header[2..4], BinaryFormat.CurrentVersion);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[4..8], 768);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[8..12], 16);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[12..16], -5); // negative count
+            header[16..20].Clear();
+            stream.Write(header);
+            stream.Position = 0;
 
             Assert.ThrowsExactly<InvalidOperationException>(() => BinaryFormat.ReadHeader(stream));
         }

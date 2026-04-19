@@ -4,6 +4,8 @@ namespace VectorSharp.Embedding
     /// Defines the contract for a component that produces vector embeddings from text.
     /// Implementations may use local model inference, remote API calls, or any other source.
     /// Each instance owns its own resources and must be disposed when no longer needed.
+    /// Individual instances are NOT required to be thread-safe — the <see cref="EmbeddingService"/>
+    /// creates one instance per worker to avoid shared state.
     /// </summary>
     public interface IEmbeddingProvider : IDisposable
     {

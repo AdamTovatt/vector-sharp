@@ -19,8 +19,12 @@ namespace VectorSharp.Storage
         /// Initializes a new instance of the <see cref="MinHeap{T}"/> class with the specified maximum size.
         /// </summary>
         /// <param name="maxSize">The maximum number of items to keep in the heap.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when maxSize is less than 1.</exception>
         public MinHeap(int maxSize)
         {
+            if (maxSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(maxSize), "Max size must be at least 1.");
+
             _maxSize = maxSize;
             _items = new T[maxSize];
             _priorities = new float[maxSize];
@@ -98,6 +102,22 @@ namespace VectorSharp.Storage
 
             Array.Sort(result, (a, b) => b.Priority.CompareTo(a.Priority));
             return result;
+        }
+
+        /// <summary>
+        /// Extracts the items from the heap sorted by priority descending (highest first),
+        /// returning only the items without their priorities.
+        /// </summary>
+        /// <returns>An array of items sorted by priority descending.</returns>
+        public T[] ExtractSortedResults()
+        {
+            (T Item, float Priority)[] sorted = GetSortedDescending();
+            T[] results = new T[sorted.Length];
+            for (int i = 0; i < sorted.Length; i++)
+            {
+                results[i] = sorted[i].Item;
+            }
+            return results;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

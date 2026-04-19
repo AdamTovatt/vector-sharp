@@ -3,7 +3,7 @@ namespace VectorSharp.Embedding
     /// <summary>
     /// Configuration options for <see cref="EmbeddingService"/>.
     /// </summary>
-    public class EmbeddingServiceOptions
+    public sealed class EmbeddingServiceOptions
     {
         /// <summary>
         /// Gets the number of concurrent embedding workers.

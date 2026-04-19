@@ -10,17 +10,17 @@ namespace VectorSharp.Storage
         /// <summary>
         /// The unique identifier of the vector.
         /// </summary>
-        public readonly TKey Id;
+        public TKey Id { get; }
 
         /// <summary>
         /// The vector values as a float array.
         /// </summary>
-        public readonly float[] Values;
+        public float[] Values { get; }
 
         /// <summary>
         /// The pre-computed magnitude (L2 norm) of the vector.
         /// </summary>
-        public readonly float Magnitude;
+        public float Magnitude { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StoredVector{TKey}"/> struct.

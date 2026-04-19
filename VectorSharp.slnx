@@ -3,6 +3,8 @@
   <Project Path="VectorSharp.Embedding.NomicEmbed/VectorSharp.Embedding.NomicEmbed.csproj" />
   <Project Path="VectorSharp.Embedding.Tests/VectorSharp.Embedding.Tests.csproj" />
   <Project Path="VectorSharp.Embedding/VectorSharp.Embedding.csproj" />
+  <Project Path="VectorSharp.Chunking/VectorSharp.Chunking.csproj" />
+  <Project Path="VectorSharp.Chunking.Tests/VectorSharp.Chunking.Tests.csproj" />
   <Project Path="VectorSharp.Storage.Tests/VectorSharp.Storage.Tests.csproj" />
   <Project Path="VectorSharp.Storage/VectorSharp.Storage.csproj" />
 </Solution>

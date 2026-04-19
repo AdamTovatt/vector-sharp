@@ -29,24 +29,28 @@ namespace VectorSharp.Embedding.NomicEmbed
         /// Creates a new <see cref="NomicEmbedProvider"/> using the bundled model files.
         /// The model files are expected in a "Models" directory relative to the assembly location.
         /// </summary>
+        /// <param name="options">Optional configuration. If null, defaults are used.</param>
         /// <returns>A new <see cref="NomicEmbedProvider"/> instance.</returns>
         /// <exception cref="FileNotFoundException">Thrown when the model files cannot be found.</exception>
-        public static NomicEmbedProvider Create()
+        public static NomicEmbedProvider Create(NomicEmbedOptions? options = null)
         {
-            string assemblyDir = Path.GetDirectoryName(typeof(NomicEmbedProvider).Assembly.Location)!;
+            string? assemblyDir = Path.GetDirectoryName(typeof(NomicEmbedProvider).Assembly.Location);
+            if (assemblyDir == null)
+                throw new InvalidOperationException("Could not determine the assembly directory.");
             string modelsDir = Path.Combine(assemblyDir, "Models");
-            return Create(modelsDir);
+            return Create(modelsDir, options);
         }
 
         /// <summary>
         /// Creates a new <see cref="NomicEmbedProvider"/> using model files from the specified directory.
         /// </summary>
         /// <param name="modelDirectoryPath">The path to the directory containing model_int8.onnx and tokenizer.json.</param>
+        /// <param name="options">Optional configuration. If null, defaults are used.</param>
         /// <returns>A new <see cref="NomicEmbedProvider"/> instance.</returns>
         /// <exception cref="ArgumentNullException">Thrown when modelDirectoryPath is null.</exception>
         /// <exception cref="DirectoryNotFoundException">Thrown when the directory does not exist.</exception>
         /// <exception cref="FileNotFoundException">Thrown when required model files are missing.</exception>
-        public static NomicEmbedProvider Create(string modelDirectoryPath)
+        public static NomicEmbedProvider Create(string modelDirectoryPath, NomicEmbedOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(modelDirectoryPath);
 
@@ -62,18 +66,30 @@ namespace VectorSharp.Embedding.NomicEmbed
             if (!File.Exists(tokenizerPath))
                 throw new FileNotFoundException($"Tokenizer file not found: {tokenizerPath}");
 
-            SessionOptions sessionOptions = new SessionOptions();
+            using SessionOptions sessionOptions = new SessionOptions();
             sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
 
-            InferenceSession session = new InferenceSession(modelPath, sessionOptions);
-
-            FastBertTokenizer.BertTokenizer tokenizer = new FastBertTokenizer.BertTokenizer();
-            using (Stream tokenizerStream = File.OpenRead(tokenizerPath))
+            if (options?.IntraOpNumThreads is int threadCount)
             {
-                tokenizer.LoadTokenizerJson(tokenizerStream);
+                sessionOptions.IntraOpNumThreads = threadCount;
             }
 
-            return new NomicEmbedProvider(session, tokenizer);
+            InferenceSession session = new InferenceSession(modelPath, sessionOptions);
+            try
+            {
+                FastBertTokenizer.BertTokenizer tokenizer = new FastBertTokenizer.BertTokenizer();
+                using (Stream tokenizerStream = File.OpenRead(tokenizerPath))
+                {
+                    tokenizer.LoadTokenizerJson(tokenizerStream);
+                }
+
+                return new NomicEmbedProvider(session, tokenizer);
+            }
+            catch
+            {
+                session.Dispose();
+                throw;
+            }
         }
 
         /// <inheritdoc />
@@ -148,12 +164,12 @@ namespace VectorSharp.Embedding.NomicEmbed
                 }
             }
 
-            if (tokenCount > 0)
+            if (tokenCount == 0)
+                throw new InvalidOperationException("Tokenization produced no tokens for the given text.");
+
+            for (int d = 0; d < EmbeddingDimension; d++)
             {
-                for (int d = 0; d < EmbeddingDimension; d++)
-                {
-                    pooled[d] /= tokenCount;
-                }
+                pooled[d] /= tokenCount;
             }
 
             // Step 6: L2 normalize

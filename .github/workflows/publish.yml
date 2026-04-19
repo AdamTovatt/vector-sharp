@@ -35,6 +35,7 @@ jobs:
           storage)     PROJECT="VectorSharp.Storage" ;;
           embedding)   PROJECT="VectorSharp.Embedding" ;;
           nomic-embed) PROJECT="VectorSharp.Embedding.NomicEmbed" ;;
+          chunking)    PROJECT="VectorSharp.Chunking" ;;
           *)           echo "Unknown package: $PACKAGE" && exit 1 ;;
         esac
         echo "PROJECT=${PROJECT}" >> $GITHUB_OUTPUT

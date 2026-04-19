@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace VectorSharp.Storage
 {
@@ -23,6 +22,7 @@ namespace VectorSharp.Storage
         private readonly int _recordSize;
         private readonly ReaderWriterLockSlim _lock = new();
         private readonly HashSet<TKey> _deletedKeys = new();
+        private readonly Dictionary<TKey, int> _keyIndex = new();
 
         private FileStream? _fileStream;
         private MemoryMappedFile? _mappedFile;
@@ -36,7 +36,21 @@ namespace VectorSharp.Storage
         public int Dimension => _dimension;
 
         /// <inheritdoc />
-        public int Count => _recordCount - _deletedKeys.Count;
+        public int Count
+        {
+            get
+            {
+                _lock.EnterReadLock();
+                try
+                {
+                    return _recordCount - _deletedKeys.Count;
+                }
+                finally
+                {
+                    _lock.ExitReadLock();
+                }
+            }
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DiskVectorStore{TKey}"/> class.
@@ -74,7 +88,7 @@ namespace VectorSharp.Storage
         }
 
         /// <inheritdoc />
-        public async Task AddAsync(TKey id, float[] values)
+        public Task AddAsync(TKey id, float[] values, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(values);
 
@@ -83,68 +97,80 @@ namespace VectorSharp.Storage
 
             float magnitude = CosineSimilarity.CalculateMagnitude(values.AsSpan());
 
-            await Task.Run(() =>
+            _lock.EnterWriteLock();
+            try
             {
-                _lock.EnterWriteLock();
+                _deletedKeys.Remove(id);
+
+                DisposeMappedFile();
                 try
                 {
-                    // Dispose existing mmap
-                    DisposeMappedFile();
-
-                    // Extend file and write record
                     long recordOffset = BinaryFormat.HeaderSize + ((long)_recordCount * _recordSize);
                     _fileStream!.Position = recordOffset;
                     BinaryFormat.WriteRecord(_fileStream, id, magnitude, values.AsSpan());
                     _fileStream.Flush();
 
-                    // Update header record count
                     _recordCount++;
                     _fileStream.Position = 0;
                     BinaryFormat.WriteHeader(_fileStream, _dimension, _keySize, _recordCount);
                     _fileStream.Flush();
 
-                    // Re-create mmap
+                    _keyIndex[id] = _recordCount - 1;
+                }
+                finally
+                {
                     RecreateMappedFile();
                 }
-                finally
-                {
-                    _lock.ExitWriteLock();
-                }
-            });
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
-        public async Task<bool> RemoveAsync(TKey id)
+        public Task<bool> RemoveAsync(TKey id, CancellationToken cancellationToken = default)
         {
-            return await Task.Run(() =>
+            _lock.EnterWriteLock();
+            try
             {
-                _lock.EnterWriteLock();
+                if (_deletedKeys.Contains(id))
+                    return Task.FromResult(false);
+
+                if (!_keyIndex.TryGetValue(id, out int recordIndex))
+                    return Task.FromResult(false);
+
+                // Write deleted status byte to disk
+                long statusOffset = BinaryFormat.HeaderSize + ((long)recordIndex * _recordSize);
+                DisposeMappedFile();
                 try
                 {
-                    // Check if the key exists in the file by scanning
-                    if (_deletedKeys.Contains(id))
-                        return false;
-
-                    bool found = FindKeyInFile(id);
-                    if (found)
-                    {
-                        _deletedKeys.Add(id);
-                        return true;
-                    }
-
-                    return false;
+                    _fileStream!.Position = statusOffset;
+                    _fileStream.WriteByte(BinaryFormat.RecordStatusDeleted);
+                    _fileStream.Flush();
                 }
                 finally
                 {
-                    _lock.ExitWriteLock();
+                    RecreateMappedFile();
                 }
-            });
+
+                _deletedKeys.Add(id);
+                return Task.FromResult(true);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count)
+        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
         {
-            if (queryVector == null || queryVector.Length == 0 || count <= 0)
+            ArgumentNullException.ThrowIfNull(queryVector);
+
+            if (queryVector.Length == 0 || count <= 0)
                 return Array.Empty<SearchResult<TKey>>();
 
             if (queryVector.Length != _dimension)
@@ -156,6 +182,8 @@ namespace VectorSharp.Storage
 
             return await Task.Run(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 _lock.EnterReadLock();
                 try
                 {
@@ -165,18 +193,18 @@ namespace VectorSharp.Storage
 
                     if (activeRecordCount > ParallelThreshold)
                     {
-                        return FindMostSimilarParallel(queryVector, queryMagnitude, count);
+                        return FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken);
                     }
                     else
                     {
-                        return FindMostSimilarSequential(queryVector, queryMagnitude, count);
+                        return FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
                     }
                 }
                 finally
                 {
                     _lock.ExitReadLock();
                 }
-            });
+            }, cancellationToken);
         }
 
         /// <summary>
@@ -194,11 +222,12 @@ namespace VectorSharp.Storage
                         return;
 
                     string tempPath = _filePath + ".tmp";
-                    int newRecordCount = _recordCount - _deletedKeys.Count;
+                    int newRecordCount = 0;
 
                     using (FileStream tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                     {
-                        BinaryFormat.WriteHeader(tempStream, _dimension, _keySize, newRecordCount);
+                        // Write placeholder header — will be overwritten with actual count
+                        BinaryFormat.WriteHeader(tempStream, _dimension, _keySize, 0);
 
                         using (MemoryMappedViewAccessor accessor = _mappedFile!.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read))
                         {
@@ -208,26 +237,37 @@ namespace VectorSharp.Storage
                             {
                                 long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
 
-                                TKey key = ReadKeyFromAccessor(accessor, offset);
+                                byte status = ReadStatusFromAccessor(accessor, offset);
+                                if (status == BinaryFormat.RecordStatusDeleted)
+                                    continue;
+
+                                TKey key = ReadKeyFromAccessor(accessor, offset + 1);
 
                                 if (_deletedKeys.Contains(key))
                                     continue;
 
-                                float magnitude = ReadMagnitudeFromAccessor(accessor, offset + _keySize);
-                                ReadValuesFromAccessor(accessor, offset + _keySize + 4, valueBuffer);
+                                float magnitude = ReadMagnitudeFromAccessor(accessor, offset + 1 + _keySize);
+                                ReadValuesFromAccessor(accessor, offset + 1 + _keySize + 4, valueBuffer);
 
                                 BinaryFormat.WriteRecord(tempStream, key, magnitude, valueBuffer.AsSpan());
+                                newRecordCount++;
                             }
                         }
+
+                        // Rewrite header with actual record count
+                        tempStream.Position = 0;
+                        BinaryFormat.WriteHeader(tempStream, _dimension, _keySize, newRecordCount);
                     }
 
-                    // Replace original file
+                    // Replace original file using rename-dance for crash safety
                     DisposeMappedFile();
                     _fileStream!.Dispose();
                     _fileStream = null;
 
-                    File.Delete(_filePath);
+                    string backupPath = _filePath + ".bak";
+                    File.Move(_filePath, backupPath);
                     File.Move(tempPath, _filePath);
+                    File.Delete(backupPath);
 
                     _recordCount = newRecordCount;
                     _deletedKeys.Clear();
@@ -235,6 +275,19 @@ namespace VectorSharp.Storage
                     // Re-open
                     _fileStream = new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
                     RecreateMappedFile();
+
+                    // Rebuild index with new record positions
+                    _keyIndex.Clear();
+                    if (_recordCount > 0 && _mappedFile != null)
+                    {
+                        using MemoryMappedViewAccessor accessor = _mappedFile.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+                        for (int i = 0; i < _recordCount; i++)
+                        {
+                            long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
+                            TKey key = ReadKeyFromAccessor(accessor, offset + 1);
+                            _keyIndex[key] = i;
+                        }
+                    }
                 }
                 finally
                 {
@@ -279,6 +332,24 @@ namespace VectorSharp.Storage
 
             _recordCount = recordCount;
             RecreateMappedFile();
+
+            // Populate _keyIndex and _deletedKeys from existing records
+            if (_recordCount > 0 && _mappedFile != null)
+            {
+                using MemoryMappedViewAccessor accessor = _mappedFile.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+                for (int i = 0; i < _recordCount; i++)
+                {
+                    long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
+                    byte status = ReadStatusFromAccessor(accessor, offset);
+                    TKey key = ReadKeyFromAccessor(accessor, offset + 1);
+                    _keyIndex[key] = i;
+
+                    if (status == BinaryFormat.RecordStatusDeleted)
+                    {
+                        _deletedKeys.Add(key);
+                    }
+                }
+            }
         }
 
         private void RecreateMappedFile()
@@ -302,7 +373,7 @@ namespace VectorSharp.Storage
             _mappedFile = null;
         }
 
-        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequential(float[] queryVector, float queryMagnitude, int count)
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequential(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             MinHeap<SearchResult<TKey>> minHeap = new MinHeap<SearchResult<TKey>>(count);
             ReadOnlySpan<float> querySpan = queryVector.AsSpan();
@@ -314,15 +385,21 @@ namespace VectorSharp.Storage
 
                 for (int i = 0; i < _recordCount; i++)
                 {
+                    if (i % 256 == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
                     long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
 
-                    TKey key = ReadKeyFromAccessor(accessor, offset);
+                    byte status = ReadStatusFromAccessor(accessor, offset);
+                    if (status == BinaryFormat.RecordStatusDeleted)
+                        continue;
+
+                    TKey key = ReadKeyFromAccessor(accessor, offset + 1);
 
                     if (_deletedKeys.Count > 0 && _deletedKeys.Contains(key))
                         continue;
 
-                    float magnitude = ReadMagnitudeFromAccessor(accessor, offset + _keySize);
-                    ReadValuesFromAccessor(accessor, offset + _keySize + 4, valueBuffer);
+                    float magnitude = ReadMagnitudeFromAccessor(accessor, offset + 1 + _keySize);
+                    ReadValuesFromAccessor(accessor, offset + 1 + _keySize + 4, valueBuffer);
 
                     ReadOnlySpan<float> storedSpan = valueBuffer.AsSpan(0, _dimension);
                     float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, storedSpan, magnitude);
@@ -336,15 +413,18 @@ namespace VectorSharp.Storage
                 ArrayPool<float>.Shared.Return(valueBuffer);
             }
 
-            return ExtractSortedResults(minHeap);
+            return minHeap.ExtractSortedResults();
         }
 
-        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count)
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
 
+            ParallelOptions parallelOptions = new ParallelOptions { CancellationToken = cancellationToken };
+
             Parallel.ForEach(
                 Partitioner.Create(0, _recordCount),
+                parallelOptions,
                 () => new MinHeap<SearchResult<TKey>>(count),
                 (range, state, localHeap) =>
                 {
@@ -359,13 +439,17 @@ namespace VectorSharp.Storage
                         {
                             long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
 
-                            TKey key = ReadKeyFromAccessor(accessor, offset);
+                            byte status = ReadStatusFromAccessor(accessor, offset);
+                            if (status == BinaryFormat.RecordStatusDeleted)
+                                continue;
+
+                            TKey key = ReadKeyFromAccessor(accessor, offset + 1);
 
                             if (_deletedKeys.Count > 0 && _deletedKeys.Contains(key))
                                 continue;
 
-                            float magnitude = ReadMagnitudeFromAccessor(accessor, offset + _keySize);
-                            ReadValuesFromAccessor(accessor, offset + _keySize + 4, valueBuffer);
+                            float magnitude = ReadMagnitudeFromAccessor(accessor, offset + 1 + _keySize);
+                            ReadValuesFromAccessor(accessor, offset + 1 + _keySize + 4, valueBuffer);
 
                             ReadOnlySpan<float> storedSpan = valueBuffer.AsSpan(0, _dimension);
                             float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, storedSpan, magnitude);
@@ -392,62 +476,34 @@ namespace VectorSharp.Storage
                 }
             }
 
-            return ExtractSortedResults(finalHeap);
+            return finalHeap.ExtractSortedResults();
         }
 
-        private bool FindKeyInFile(TKey id)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static byte ReadStatusFromAccessor(MemoryMappedViewAccessor accessor, long offset)
         {
-            if (_mappedFile == null || _recordCount == 0)
-                return false;
-
-            using MemoryMappedViewAccessor accessor = _mappedFile.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-
-            for (int i = 0; i < _recordCount; i++)
-            {
-                long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
-                TKey key = ReadKeyFromAccessor(accessor, offset);
-
-                if (key.Equals(id))
-                    return true;
-            }
-
-            return false;
+            return accessor.ReadByte(offset);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private TKey ReadKeyFromAccessor(MemoryMappedViewAccessor accessor, long offset)
         {
-            byte[] keyBytes = new byte[_keySize];
-            accessor.ReadArray(offset, keyBytes, 0, _keySize);
-            return MemoryMarshal.Read<TKey>(keyBytes);
+            accessor.Read(offset, out TKey key);
+            return key;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float ReadMagnitudeFromAccessor(MemoryMappedViewAccessor accessor, long offset)
         {
-            byte[] magBytes = new byte[4];
-            accessor.ReadArray(offset, magBytes, 0, 4);
-            return BitConverter.ToSingle(magBytes);
+            accessor.Read(offset, out float magnitude);
+            return magnitude;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ReadValuesFromAccessor(MemoryMappedViewAccessor accessor, long offset, float[] buffer)
         {
-            byte[] valueBytes = new byte[_dimension * 4];
-            accessor.ReadArray(offset, valueBytes, 0, valueBytes.Length);
-            MemoryMarshal.Cast<byte, float>(valueBytes.AsSpan()).CopyTo(buffer.AsSpan(0, _dimension));
+            accessor.ReadArray(offset, buffer, 0, _dimension);
         }
 
-        private static SearchResult<TKey>[] ExtractSortedResults(MinHeap<SearchResult<TKey>> heap)
-        {
-            (SearchResult<TKey> Item, float Priority)[] sorted = heap.GetSortedDescending();
-            SearchResult<TKey>[] results = new SearchResult<TKey>[sorted.Length];
-            for (int i = 0; i < sorted.Length; i++)
-            {
-                results[i] = sorted[i].Item;
-            }
-
-            return results;
-        }
     }
 }

@@ -77,11 +77,6 @@ namespace VectorSharp.Storage
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float CalculateDotProduct(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
         {
-            if (a.Length == 768)
-            {
-                return CalculateDotProduct768(a, b);
-            }
-
             float dotProduct = 0.0f;
 
             if (Vector.IsHardwareAccelerated && a.Length >= Vector<float>.Count)
@@ -108,33 +103,6 @@ namespace VectorSharp.Storage
                 {
                     dotProduct += a[i] * b[i];
                 }
-            }
-
-            return dotProduct;
-        }
-
-        /// <summary>
-        /// Optimized dot product for 768-dimensional vectors using loop unrolling.
-        /// 768 is divisible by 4, so no remainder handling is needed.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float CalculateDotProduct768(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
-        {
-            float dotProduct = 0.0f;
-
-            for (int i = 0; i <= a.Length - 4; i += 4)
-            {
-                float a0 = a[i];
-                float a1 = a[i + 1];
-                float a2 = a[i + 2];
-                float a3 = a[i + 3];
-
-                float b0 = b[i];
-                float b1 = b[i + 1];
-                float b2 = b[i + 2];
-                float b3 = b[i + 3];
-
-                dotProduct += (a0 * b0) + (a1 * b1) + (a2 * b2) + (a3 * b3);
             }
 
             return dotProduct;

@@ -103,14 +103,14 @@ namespace VectorSharp.Storage.Tests
         }
 
         [TestMethod]
-        public async Task SearchAsync_ZeroCount_ReturnsEmpty()
+        public async Task SearchAsync_ZeroCount_Throws()
         {
             using CosineVectorStore<Guid> store = await TestHelpers.CreatePopulatedStoreAsync("store", DefaultDimension, 10);
 
             float[] query = TestHelpers.CreateRandomVector(DefaultDimension);
-            IReadOnlyList<SearchResult<Guid>> results = await VectorSearch.SearchAsync(query, 0, store);
 
-            Assert.AreEqual(0, results.Count);
+            await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(() =>
+                VectorSearch.SearchAsync(query, 0, store));
         }
 
         [TestMethod]

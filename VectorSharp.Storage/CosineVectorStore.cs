@@ -61,7 +61,7 @@ namespace VectorSharp.Storage
         }
 
         /// <inheritdoc />
-        public async Task AddAsync(TKey id, float[] values)
+        public Task AddAsync(TKey id, float[] values, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(values);
 
@@ -71,50 +71,48 @@ namespace VectorSharp.Storage
             float magnitude = CosineSimilarity.CalculateMagnitude(values.AsSpan());
             StoredVector<TKey> vector = new StoredVector<TKey>(id, values, magnitude);
 
-            await Task.Run(() =>
+            _lock.EnterWriteLock();
+            try
             {
-                _lock.EnterWriteLock();
-                try
-                {
-                    _vectors.Add(vector);
-                }
-                finally
-                {
-                    _lock.ExitWriteLock();
-                }
-            });
+                _vectors.Add(vector);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
-        public async Task<bool> RemoveAsync(TKey id)
+        public Task<bool> RemoveAsync(TKey id, CancellationToken cancellationToken = default)
         {
-            return await Task.Run(() =>
+            _lock.EnterWriteLock();
+            try
             {
-                _lock.EnterWriteLock();
-                try
+                for (int i = 0; i < _vectors.Count; i++)
                 {
-                    for (int i = 0; i < _vectors.Count; i++)
+                    if (_vectors[i].Id.Equals(id))
                     {
-                        if (_vectors[i].Id.Equals(id))
-                        {
-                            _vectors.RemoveAt(i);
-                            return true;
-                        }
+                        _vectors.RemoveAt(i);
+                        return Task.FromResult(true);
                     }
+                }
 
-                    return false;
-                }
-                finally
-                {
-                    _lock.ExitWriteLock();
-                }
-            });
+                return Task.FromResult(false);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count)
+        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
         {
-            if (queryVector == null || queryVector.Length == 0 || count <= 0)
+            ArgumentNullException.ThrowIfNull(queryVector);
+
+            if (queryVector.Length == 0 || count <= 0)
                 return Array.Empty<SearchResult<TKey>>();
 
             if (queryVector.Length != _dimension)
@@ -126,23 +124,25 @@ namespace VectorSharp.Storage
 
             return await Task.Run(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 _lock.EnterReadLock();
                 try
                 {
                     if (_vectors.Count > ParallelThreshold)
                     {
-                        return FindMostSimilarParallel(queryVector, queryMagnitude, count);
+                        return FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken);
                     }
                     else
                     {
-                        return FindMostSimilarSequential(queryVector, queryMagnitude, count);
+                        return FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
                     }
                 }
                 finally
                 {
                     _lock.ExitReadLock();
                 }
-            });
+            }, cancellationToken);
         }
 
         /// <summary>
@@ -214,7 +214,11 @@ namespace VectorSharp.Storage
 
                     for (int i = 0; i < recordCount; i++)
                     {
-                        (TKey key, float magnitude, float[] values) = BinaryFormat.ReadRecord<TKey>(stream, _dimension);
+                        (byte status, TKey key, float magnitude, float[] values) = BinaryFormat.ReadRecord<TKey>(stream, _dimension);
+
+                        if (status == BinaryFormat.RecordStatusDeleted)
+                            continue;
+
                         _vectors.Add(new StoredVector<TKey>(key, values, magnitude));
                     }
                 }
@@ -249,28 +253,32 @@ namespace VectorSharp.Storage
             }
         }
 
-        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequential(float[] queryVector, float queryMagnitude, int count)
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequential(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             MinHeap<SearchResult<TKey>> minHeap = new MinHeap<SearchResult<TKey>>(count);
             ReadOnlySpan<float> querySpan = queryVector.AsSpan();
 
             for (int i = 0; i < _vectors.Count; i++)
             {
+                if (i % 256 == 0)
+                    cancellationToken.ThrowIfCancellationRequested();
                 StoredVector<TKey> stored = _vectors[i];
                 float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, stored.GetSpan(), stored.Magnitude);
                 SearchResult<TKey> result = new SearchResult<TKey> { Id = stored.Id, Score = similarity, StoreName = Name };
                 minHeap.Add(result, similarity);
             }
 
-            return ExtractSortedResults(minHeap);
+            return minHeap.ExtractSortedResults();
         }
 
-        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count)
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
+            ParallelOptions parallelOptions = new ParallelOptions { CancellationToken = cancellationToken };
 
             Parallel.ForEach(
                 Partitioner.Create(0, _vectors.Count),
+                parallelOptions,
                 () => new MinHeap<SearchResult<TKey>>(count),
                 (range, state, localHeap) =>
                 {
@@ -298,20 +306,7 @@ namespace VectorSharp.Storage
                 }
             }
 
-            return ExtractSortedResults(finalHeap);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static SearchResult<TKey>[] ExtractSortedResults(MinHeap<SearchResult<TKey>> heap)
-        {
-            (SearchResult<TKey> Item, float Priority)[] sorted = heap.GetSortedDescending();
-            SearchResult<TKey>[] results = new SearchResult<TKey>[sorted.Length];
-            for (int i = 0; i < sorted.Length; i++)
-            {
-                results[i] = sorted[i].Item;
-            }
-
-            return results;
+            return finalHeap.ExtractSortedResults();
         }
     }
 }

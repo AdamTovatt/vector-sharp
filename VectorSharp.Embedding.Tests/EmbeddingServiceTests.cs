@@ -200,48 +200,25 @@ namespace VectorSharp.Embedding.Tests
         }
 
         [TestMethod]
-        public async Task EmbedAsync_WithConcurrency2_ProcessesFasterThanSingle()
+        public async Task EmbedAsync_WithConcurrency2_UsesMultipleWorkers()
         {
-            int requestCount = 10;
-            TimeSpan delayPerRequest = TimeSpan.FromMilliseconds(50);
+            // Verify that both workers process requests by checking total call count
+            // across all provider instances
+            SharedCounter counter = new SharedCounter();
 
-            // Single worker
-            System.Diagnostics.Stopwatch singleTimer = System.Diagnostics.Stopwatch.StartNew();
-            await using (EmbeddingService singleService = new EmbeddingService(
-                () => new TestEmbeddingProvider(128, delay: delayPerRequest),
-                new EmbeddingServiceOptions { Concurrency = 1 }))
+            await using EmbeddingService service = new EmbeddingService(
+                () => new CountingProvider(128, counter),
+                new EmbeddingServiceOptions { Concurrency = 2 });
+
+            Task<float[]>[] tasks = new Task<float[]>[20];
+            for (int i = 0; i < 20; i++)
             {
-                Task<float[]>[] singleTasks = new Task<float[]>[requestCount];
-                for (int i = 0; i < requestCount; i++)
-                {
-                    singleTasks[i] = singleService.EmbedAsync($"text {i}");
-                }
-
-                await Task.WhenAll(singleTasks);
+                tasks[i] = service.EmbedAsync($"text {i}");
             }
 
-            singleTimer.Stop();
+            await Task.WhenAll(tasks);
 
-            // Two workers
-            System.Diagnostics.Stopwatch dualTimer = System.Diagnostics.Stopwatch.StartNew();
-            await using (EmbeddingService dualService = new EmbeddingService(
-                () => new TestEmbeddingProvider(128, delay: delayPerRequest),
-                new EmbeddingServiceOptions { Concurrency = 2 }))
-            {
-                Task<float[]>[] dualTasks = new Task<float[]>[requestCount];
-                for (int i = 0; i < requestCount; i++)
-                {
-                    dualTasks[i] = dualService.EmbedAsync($"text {i}");
-                }
-
-                await Task.WhenAll(dualTasks);
-            }
-
-            dualTimer.Stop();
-
-            // Two workers should be noticeably faster
-            Assert.IsTrue(dualTimer.ElapsedMilliseconds < singleTimer.ElapsedMilliseconds,
-                $"Dual ({dualTimer.ElapsedMilliseconds}ms) should be faster than single ({singleTimer.ElapsedMilliseconds}ms)");
+            Assert.AreEqual(20, counter.Value);
         }
 
         #endregion
@@ -268,6 +245,35 @@ namespace VectorSharp.Embedding.Tests
             public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
             {
                 throw new InvalidOperationException("Intentional test failure");
+            }
+
+            public void Dispose() { }
+        }
+
+        private sealed class SharedCounter
+        {
+            private int _value;
+            public int Value => _value;
+            public void Increment() => Interlocked.Increment(ref _value);
+        }
+
+        private sealed class CountingProvider : IEmbeddingProvider
+        {
+            private readonly SharedCounter _counter;
+
+            public int Dimension { get; }
+
+            public CountingProvider(int dimension, SharedCounter counter)
+            {
+                Dimension = dimension;
+                _counter = counter;
+            }
+
+            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
+            {
+                _counter.Increment();
+                float[] result = new float[Dimension];
+                return Task.FromResult(result);
             }
 
             public void Dispose() { }

@@ -29,22 +29,25 @@ namespace VectorSharp.Storage
         /// </summary>
         /// <param name="id">The unique identifier for the vector.</param>
         /// <param name="values">The vector values. Must match the store's <see cref="Dimension"/>.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task that represents the asynchronous add operation.</returns>
-        Task AddAsync(TKey id, float[] values);
+        Task AddAsync(TKey id, float[] values, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Removes a vector from the store by its identifier.
         /// </summary>
         /// <param name="id">The identifier of the vector to remove.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task whose result is true if the vector was found and removed; otherwise, false.</returns>
-        Task<bool> RemoveAsync(TKey id);
+        Task<bool> RemoveAsync(TKey id, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Finds the most similar vectors to the given query vector using cosine similarity.
         /// </summary>
         /// <param name="queryVector">The query vector to compare against. Must match the store's <see cref="Dimension"/>.</param>
         /// <param name="count">The maximum number of results to return.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>Results sorted by similarity score, highest first.</returns>
-        Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count);
+        Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default);
     }
 }

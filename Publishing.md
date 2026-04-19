@@ -17,6 +17,7 @@ Where `{package}` is the lowercase package name and `{version}` is a valid semve
 | `storage` | VectorSharp.Storage |
 | `embedding` | VectorSharp.Embedding |
 | `nomic-embed` | VectorSharp.Embedding.NomicEmbed |
+| `chunking` | VectorSharp.Chunking |
 
 ## Publishing a Package
 
@@ -45,6 +46,10 @@ git push origin embedding-v1.0.0
 # Publish VectorSharp.Embedding.NomicEmbed 1.0.0
 git tag nomic-embed-v1.0.0
 git push origin nomic-embed-v1.0.0
+
+# Publish VectorSharp.Chunking 1.0.0
+git tag chunking-v1.0.0
+git push origin chunking-v1.0.0
 ```
 
 ## Prerequisites

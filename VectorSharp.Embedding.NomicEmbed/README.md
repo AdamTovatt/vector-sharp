@@ -95,9 +95,42 @@ using NomicEmbedProvider provider = NomicEmbedProvider.Create("/path/to/model/di
 
 The directory must contain `model_int8.onnx` and `vocab.txt`.
 
+## Performance Tuning
+
+Each `EmbeddingService` worker runs its own `NomicEmbedProvider` with its own ONNX Runtime session. ONNX Runtime also parallelizes internally within each session using `IntraOpNumThreads`. These two knobs interact — the best configuration depends on your use case.
+
+### Benchmarks (Apple M-series, 18 cores, int8 model)
+
+| Config | Throughput | CPU usage | Memory |
+|--------|-----------|-----------|--------|
+| 1 worker, default threads | ~205/sec | ~98% | 4 MB |
+| 2 workers, default threads | ~325/sec | ~98% | 8 MB |
+| 2 workers, 4 threads each | ~281/sec | ~46% | 9 MB |
+| 2 workers, 3 threads each | ~259/sec | ~35% | 9 MB |
+| 9 workers, 2 threads each | ~680/sec | ~96% | 34 MB |
+
+### Recommendations
+
+- **Background indexing alongside other work**: 2 workers, 3-4 threads each. Good throughput without saturating the CPU.
+- **Dedicated bulk indexing**: higher concurrency with 2 threads each (e.g., `cores / 2` workers).
+- **Single request at a time**: 1 worker, default threads. Lowest latency per embedding.
+
+### Configuring IntraOpNumThreads
+
+```csharp
+NomicEmbedOptions nomicOptions = new NomicEmbedOptions { IntraOpNumThreads = 4 };
+
+await using EmbeddingService embedder = new EmbeddingService(
+    () => NomicEmbedProvider.Create(nomicOptions),
+    new EmbeddingServiceOptions { Concurrency = 2 }
+);
+```
+
+When `IntraOpNumThreads` is not set, ONNX Runtime defaults to using all available cores per session — which means even a single worker will use significant CPU.
+
 ## Memory Usage
 
-Each `NomicEmbedProvider` instance loads the model into memory (~137 MB). When using `EmbeddingService` with concurrency > 1, each worker has its own instance, so memory usage scales linearly: concurrency 2 = ~274 MB, concurrency 4 = ~548 MB.
+Each `NomicEmbedProvider` instance uses ~4 MB of managed memory. The ONNX model weights (~137 MB on disk) are memory-mapped by the OS and shared across sessions, so scaling concurrency has minimal additional memory cost.
 
 ## License
 

@@ -9,6 +9,7 @@ A high-performance .NET library for in-process vector similarity search and text
 | [VectorSharp.Storage](VectorSharp.Storage/README.md) | In-memory and disk-backed vector storage with SIMD-optimized cosine similarity | `dotnet add package VectorSharp.Storage` |
 | [VectorSharp.Embedding](VectorSharp.Embedding/README.md) | Channel-based embedding service with configurable parallelism | `dotnet add package VectorSharp.Embedding` |
 | [VectorSharp.Embedding.NomicEmbed](VectorSharp.Embedding.NomicEmbed/README.md) | Nomic Embed Text v1.5 model for local inference (768-dim, 8192 token context) | `dotnet add package VectorSharp.Embedding.NomicEmbed` |
+| [VectorSharp.Chunking](VectorSharp.Chunking/README.md) | Streaming text chunker with predefined formats for Markdown and C# | `dotnet add package VectorSharp.Chunking` |
 
 ## Quick Start
 
