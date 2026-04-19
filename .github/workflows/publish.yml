@@ -52,7 +52,9 @@ jobs:
       run: dotnet build --no-restore --configuration Release -p:Version=${{ steps.tag.outputs.VERSION }}
 
     - name: Test
-      run: dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~PerformanceTest&TestCategory!=RequiresModel"
+      # xUnit traits are keyed by the trait name directly ("Category"), not
+      # MSTest's "TestCategory". Using the wrong key turns this filter into a no-op.
+      run: dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~PerformanceTest&Category!=RequiresModel"
 
     - name: Pack
       run: dotnet pack ${{ steps.project.outputs.PROJECT }} --no-build --configuration Release -p:Version=${{ steps.tag.outputs.VERSION }} --output ./nupkgs
