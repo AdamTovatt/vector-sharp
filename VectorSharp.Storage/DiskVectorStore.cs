@@ -14,7 +14,7 @@ namespace VectorSharp.Storage
     public sealed class DiskVectorStore<TKey> : IVectorStore<TKey>
         where TKey : unmanaged, IEquatable<TKey>
     {
-        private static readonly int ParallelThreshold = Math.Max(512, Environment.ProcessorCount * 256);
+        internal static readonly int ParallelThreshold = Math.Max(512, Environment.ProcessorCount * 256);
 
         private readonly string _filePath;
         private readonly int _dimension;
@@ -166,7 +166,13 @@ namespace VectorSharp.Storage
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
+        {
+            return FindMostSimilarAsync(queryVector, count, filter: null, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, Func<TKey, bool>? filter, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(queryVector);
 
@@ -191,14 +197,18 @@ namespace VectorSharp.Storage
                     if (activeRecordCount == 0)
                         return Array.Empty<SearchResult<TKey>>();
 
-                    if (activeRecordCount > ParallelThreshold)
+                    bool useParallel = activeRecordCount > ParallelThreshold;
+
+                    if (filter is null)
                     {
-                        return FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken);
+                        return useParallel
+                            ? FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken)
+                            : FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
                     }
-                    else
-                    {
-                        return FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
-                    }
+
+                    return useParallel
+                        ? FindMostSimilarParallelFiltered(queryVector, queryMagnitude, count, filter, cancellationToken)
+                        : FindMostSimilarSequentialFiltered(queryVector, queryMagnitude, count, filter, cancellationToken);
                 }
                 finally
                 {
@@ -416,6 +426,52 @@ namespace VectorSharp.Storage
             return minHeap.ExtractSortedResults();
         }
 
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequentialFiltered(float[] queryVector, float queryMagnitude, int count, Func<TKey, bool> filter, CancellationToken cancellationToken)
+        {
+            MinHeap<SearchResult<TKey>> minHeap = new MinHeap<SearchResult<TKey>>(count);
+            ReadOnlySpan<float> querySpan = queryVector.AsSpan();
+
+            float[] valueBuffer = ArrayPool<float>.Shared.Rent(_dimension);
+            try
+            {
+                using MemoryMappedViewAccessor accessor = _mappedFile!.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+                for (int i = 0; i < _recordCount; i++)
+                {
+                    if (i % 256 == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+                    long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
+
+                    byte status = ReadStatusFromAccessor(accessor, offset);
+                    if (status == BinaryFormat.RecordStatusDeleted)
+                        continue;
+
+                    TKey key = ReadKeyFromAccessor(accessor, offset + 1);
+
+                    if (_deletedKeys.Count > 0 && _deletedKeys.Contains(key))
+                        continue;
+
+                    if (!filter(key))
+                        continue;
+
+                    float magnitude = ReadMagnitudeFromAccessor(accessor, offset + 1 + _keySize);
+                    ReadValuesFromAccessor(accessor, offset + 1 + _keySize + 4, valueBuffer);
+
+                    ReadOnlySpan<float> storedSpan = valueBuffer.AsSpan(0, _dimension);
+                    float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, storedSpan, magnitude);
+
+                    SearchResult<TKey> result = new SearchResult<TKey> { Id = key, Score = similarity, StoreName = Name };
+                    minHeap.Add(result, similarity);
+                }
+            }
+            finally
+            {
+                ArrayPool<float>.Shared.Return(valueBuffer);
+            }
+
+            return minHeap.ExtractSortedResults();
+        }
+
         private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
@@ -467,6 +523,68 @@ namespace VectorSharp.Storage
                 },
                 localHeap => partitionResults.Add(localHeap.GetSortedDescending()));
 
+            return MergePartitions(partitionResults, count);
+        }
+
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallelFiltered(float[] queryVector, float queryMagnitude, int count, Func<TKey, bool> filter, CancellationToken cancellationToken)
+        {
+            ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
+
+            ParallelOptions parallelOptions = new ParallelOptions { CancellationToken = cancellationToken };
+
+            Parallel.ForEach(
+                Partitioner.Create(0, _recordCount),
+                parallelOptions,
+                () => new MinHeap<SearchResult<TKey>>(count),
+                (range, state, localHeap) =>
+                {
+                    ReadOnlySpan<float> querySpan = queryVector.AsSpan();
+                    float[] valueBuffer = ArrayPool<float>.Shared.Rent(_dimension);
+
+                    try
+                    {
+                        using MemoryMappedViewAccessor accessor = _mappedFile!.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+                        for (int i = range.Item1; i < range.Item2; i++)
+                        {
+                            long offset = BinaryFormat.HeaderSize + ((long)i * _recordSize);
+
+                            byte status = ReadStatusFromAccessor(accessor, offset);
+                            if (status == BinaryFormat.RecordStatusDeleted)
+                                continue;
+
+                            TKey key = ReadKeyFromAccessor(accessor, offset + 1);
+
+                            if (_deletedKeys.Count > 0 && _deletedKeys.Contains(key))
+                                continue;
+
+                            if (!filter(key))
+                                continue;
+
+                            float magnitude = ReadMagnitudeFromAccessor(accessor, offset + 1 + _keySize);
+                            ReadValuesFromAccessor(accessor, offset + 1 + _keySize + 4, valueBuffer);
+
+                            ReadOnlySpan<float> storedSpan = valueBuffer.AsSpan(0, _dimension);
+                            float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, storedSpan, magnitude);
+
+                            SearchResult<TKey> result = new SearchResult<TKey> { Id = key, Score = similarity, StoreName = Name };
+                            localHeap.Add(result, similarity);
+                        }
+                    }
+                    finally
+                    {
+                        ArrayPool<float>.Shared.Return(valueBuffer);
+                    }
+
+                    return localHeap;
+                },
+                localHeap => partitionResults.Add(localHeap.GetSortedDescending()));
+
+            return MergePartitions(partitionResults, count);
+        }
+
+        private static IReadOnlyList<SearchResult<TKey>> MergePartitions(ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults, int count)
+        {
             MinHeap<SearchResult<TKey>> finalHeap = new MinHeap<SearchResult<TKey>>(count);
             foreach ((SearchResult<TKey> Item, float Priority)[] partition in partitionResults)
             {

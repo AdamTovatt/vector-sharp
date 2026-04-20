@@ -422,6 +422,101 @@ namespace VectorSharp.Storage.Tests
 
         #endregion
 
+        #region Filter
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_OnlyReturnsAllowedIds()
+        {
+            using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
+            for (int i = 0; i < 20; i++)
+            {
+                await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+            }
+
+            HashSet<int> allowed = new HashSet<int> { 2, 5, 7 };
+            IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, allowed.Contains);
+
+            Assert.Equal(3, results.Count);
+            foreach (SearchResult<int> result in results)
+                Assert.Contains(result.Id, allowed);
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithNullFilter_SameAsNoFilter()
+        {
+            using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
+            for (int i = 0; i < 10; i++)
+            {
+                await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+            }
+
+            float[] query = TestHelpers.CreateRandomVector(DefaultDimension, seed: 99);
+            IReadOnlyList<SearchResult<int>> unfiltered = await store.FindMostSimilarAsync(query, 5);
+            IReadOnlyList<SearchResult<int>> nullFilter = await store.FindMostSimilarAsync(query, 5, filter: null);
+
+            Assert.Equal(unfiltered.Count, nullFilter.Count);
+            for (int i = 0; i < unfiltered.Count; i++)
+            {
+                Assert.Equal(unfiltered[i].Id, nullFilter[i].Id);
+                Assert.Equal(unfiltered[i].Score, nullFilter[i].Score);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilterExcludingAll_ReturnsEmpty()
+        {
+            using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
+            for (int i = 0; i < 10; i++)
+            {
+                await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+            }
+
+            IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, _ => false);
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_CountAppliesAfterFiltering()
+        {
+            using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
+            for (int i = 0; i < 20; i++)
+            {
+                await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+            }
+
+            HashSet<int> allowed = new HashSet<int> { 1, 3, 5, 7, 9, 11 };
+            IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 3, allowed.Contains);
+
+            Assert.Equal(3, results.Count);
+            foreach (SearchResult<int> result in results)
+                Assert.Contains(result.Id, allowed);
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_WorksInParallelPath()
+        {
+            int vectorCount = CosineVectorStore<int>.ParallelThreshold + 1;
+            using CosineVectorStore<int> store = new CosineVectorStore<int>(DefaultName, DefaultDimension);
+            for (int i = 0; i < vectorCount; i++)
+            {
+                await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+            }
+
+            HashSet<int> allowed = new HashSet<int>(Enumerable.Range(0, vectorCount).Where(i => i % 7 == 0));
+            IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, allowed.Contains);
+
+            Assert.Equal(10, results.Count);
+            foreach (SearchResult<int> result in results)
+                Assert.Contains(result.Id, allowed);
+        }
+
+        #endregion
+
         #region Helpers
 
         private static async Task VerifyDimensionWorks(int dimension)

@@ -12,7 +12,7 @@ namespace VectorSharp.Storage
     public class CosineVectorStore<TKey> : IVectorStore<TKey>
         where TKey : unmanaged, IEquatable<TKey>
     {
-        private static readonly int ParallelThreshold = Math.Max(512, Environment.ProcessorCount * 256);
+        internal static readonly int ParallelThreshold = Math.Max(512, Environment.ProcessorCount * 256);
 
         private readonly List<StoredVector<TKey>> _vectors = new();
         private readonly ReaderWriterLockSlim _lock = new();
@@ -108,7 +108,13 @@ namespace VectorSharp.Storage
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, CancellationToken cancellationToken = default)
+        {
+            return FindMostSimilarAsync(queryVector, count, filter: null, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<SearchResult<TKey>>> FindMostSimilarAsync(float[] queryVector, int count, Func<TKey, bool>? filter, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(queryVector);
 
@@ -129,14 +135,18 @@ namespace VectorSharp.Storage
                 _lock.EnterReadLock();
                 try
                 {
-                    if (_vectors.Count > ParallelThreshold)
+                    bool useParallel = _vectors.Count > ParallelThreshold;
+
+                    if (filter is null)
                     {
-                        return FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken);
+                        return useParallel
+                            ? FindMostSimilarParallel(queryVector, queryMagnitude, count, cancellationToken)
+                            : FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
                     }
-                    else
-                    {
-                        return FindMostSimilarSequential(queryVector, queryMagnitude, count, cancellationToken);
-                    }
+
+                    return useParallel
+                        ? FindMostSimilarParallelFiltered(queryVector, queryMagnitude, count, filter, cancellationToken)
+                        : FindMostSimilarSequentialFiltered(queryVector, queryMagnitude, count, filter, cancellationToken);
                 }
                 finally
                 {
@@ -271,6 +281,26 @@ namespace VectorSharp.Storage
             return minHeap.ExtractSortedResults();
         }
 
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarSequentialFiltered(float[] queryVector, float queryMagnitude, int count, Func<TKey, bool> filter, CancellationToken cancellationToken)
+        {
+            MinHeap<SearchResult<TKey>> minHeap = new MinHeap<SearchResult<TKey>>(count);
+            ReadOnlySpan<float> querySpan = queryVector.AsSpan();
+
+            for (int i = 0; i < _vectors.Count; i++)
+            {
+                if (i % 256 == 0)
+                    cancellationToken.ThrowIfCancellationRequested();
+                StoredVector<TKey> stored = _vectors[i];
+                if (!filter(stored.Id))
+                    continue;
+                float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, stored.GetSpan(), stored.Magnitude);
+                SearchResult<TKey> result = new SearchResult<TKey> { Id = stored.Id, Score = similarity, StoreName = Name };
+                minHeap.Add(result, similarity);
+            }
+
+            return minHeap.ExtractSortedResults();
+        }
+
         private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallel(float[] queryVector, float queryMagnitude, int count, CancellationToken cancellationToken)
         {
             ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
@@ -296,7 +326,41 @@ namespace VectorSharp.Storage
                 },
                 localHeap => partitionResults.Add(localHeap.GetSortedDescending()));
 
-            // Merge partition results into final heap
+            return MergePartitions(partitionResults, count);
+        }
+
+        private IReadOnlyList<SearchResult<TKey>> FindMostSimilarParallelFiltered(float[] queryVector, float queryMagnitude, int count, Func<TKey, bool> filter, CancellationToken cancellationToken)
+        {
+            ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults = new();
+            ParallelOptions parallelOptions = new ParallelOptions { CancellationToken = cancellationToken };
+
+            Parallel.ForEach(
+                Partitioner.Create(0, _vectors.Count),
+                parallelOptions,
+                () => new MinHeap<SearchResult<TKey>>(count),
+                (range, state, localHeap) =>
+                {
+                    ReadOnlySpan<float> querySpan = queryVector.AsSpan();
+
+                    for (int i = range.Item1; i < range.Item2; i++)
+                    {
+                        StoredVector<TKey> stored = _vectors[i];
+                        if (!filter(stored.Id))
+                            continue;
+                        float similarity = CosineSimilarity.Calculate(querySpan, queryMagnitude, stored.GetSpan(), stored.Magnitude);
+                        SearchResult<TKey> result = new SearchResult<TKey> { Id = stored.Id, Score = similarity, StoreName = Name };
+                        localHeap.Add(result, similarity);
+                    }
+
+                    return localHeap;
+                },
+                localHeap => partitionResults.Add(localHeap.GetSortedDescending()));
+
+            return MergePartitions(partitionResults, count);
+        }
+
+        private static IReadOnlyList<SearchResult<TKey>> MergePartitions(ConcurrentBag<(SearchResult<TKey> Item, float Priority)[]> partitionResults, int count)
+        {
             MinHeap<SearchResult<TKey>> finalHeap = new MinHeap<SearchResult<TKey>>(count);
             foreach ((SearchResult<TKey> Item, float Priority)[] partition in partitionResults)
             {

@@ -610,5 +610,168 @@ namespace VectorSharp.Storage.Tests
         }
 
         #endregion
+
+        #region Filter
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_OnlyReturnsAllowedIds()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < 20; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                HashSet<int> allowed = new HashSet<int> { 2, 5, 7 };
+                IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                    TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, allowed.Contains);
+
+                Assert.Equal(3, results.Count);
+                foreach (SearchResult<int> result in results)
+                    Assert.Contains(result.Id, allowed);
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithNullFilter_SameAsNoFilter()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < 10; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                float[] query = TestHelpers.CreateRandomVector(DefaultDimension, seed: 99);
+                IReadOnlyList<SearchResult<int>> unfiltered = await store.FindMostSimilarAsync(query, 5);
+                IReadOnlyList<SearchResult<int>> nullFilter = await store.FindMostSimilarAsync(query, 5, filter: null);
+
+                Assert.Equal(unfiltered.Count, nullFilter.Count);
+                for (int i = 0; i < unfiltered.Count; i++)
+                {
+                    Assert.Equal(unfiltered[i].Id, nullFilter[i].Id);
+                    Assert.Equal(unfiltered[i].Score, nullFilter[i].Score);
+                }
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilterExcludingAll_ReturnsEmpty()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < 10; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                    TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, _ => false);
+
+                Assert.Empty(results);
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_CountAppliesAfterFiltering()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < 20; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                HashSet<int> allowed = new HashSet<int> { 1, 3, 5, 7, 9, 11 };
+                IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                    TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 3, allowed.Contains);
+
+                Assert.Equal(3, results.Count);
+                foreach (SearchResult<int> result in results)
+                    Assert.Contains(result.Id, allowed);
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_SkipsDeletedKeys()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < 10; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                // Delete a key the filter would otherwise allow.
+                await store.RemoveAsync(5);
+
+                HashSet<int> allowed = new HashSet<int> { 2, 5, 7 };
+                IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                    TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, allowed.Contains);
+
+                Assert.Equal(2, results.Count);
+                Assert.DoesNotContain(results, result => result.Id == 5);
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        [Fact]
+        public async Task FindMostSimilarAsync_WithFilter_WorksInParallelPath()
+        {
+            string filePath = GetTempFilePath();
+            try
+            {
+                int vectorCount = DiskVectorStore<int>.ParallelThreshold + 1;
+                using DiskVectorStore<int> store = new DiskVectorStore<int>(DefaultName, filePath, DefaultDimension);
+                for (int i = 0; i < vectorCount; i++)
+                {
+                    await store.AddAsync(i, TestHelpers.CreateRandomVector(DefaultDimension, seed: i));
+                }
+
+                HashSet<int> allowed = new HashSet<int>(Enumerable.Range(0, vectorCount).Where(i => i % 7 == 0));
+                IReadOnlyList<SearchResult<int>> results = await store.FindMostSimilarAsync(
+                    TestHelpers.CreateRandomVector(DefaultDimension, seed: 99), 10, allowed.Contains);
+
+                Assert.Equal(10, results.Count);
+                foreach (SearchResult<int> result in results)
+                    Assert.Contains(result.Id, allowed);
+            }
+            finally
+            {
+                CleanupFile(filePath);
+            }
+        }
+
+        #endregion
     }
 }
