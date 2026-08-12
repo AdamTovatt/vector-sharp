@@ -75,32 +75,38 @@ namespace VectorSharp.Chunking
                 }
                 else if (currentMatch != null)
                 {
-                    string result = segmentBuilder.ToString(0, matchEndPosition);
-
-                    string extraChars = segmentBuilder.ToString(matchEndPosition, segmentBuilder.Length - matchEndPosition);
-                    foreach (char c in extraChars)
-                    {
-                        _unreadBuffer.Enqueue(c);
-                    }
-
-                    return TrackPosition(result);
+                    return TakeSegmentAndPushBackTail(segmentBuilder, matchEndPosition);
                 }
             }
 
             if (currentMatch != null)
             {
-                string result = segmentBuilder.ToString(0, matchEndPosition);
-
-                string extraChars = segmentBuilder.ToString(matchEndPosition, segmentBuilder.Length - matchEndPosition);
-                foreach (char c in extraChars)
-                {
-                    _unreadBuffer.Enqueue(c);
-                }
-
-                return TrackPosition(result);
+                return TakeSegmentAndPushBackTail(segmentBuilder, matchEndPosition);
             }
 
             return segmentBuilder.Length > 0 ? TrackPosition(segmentBuilder.ToString()) : null;
+        }
+
+        /// <summary>
+        /// Returns everything up to the end of the break string match, and puts the lookahead read
+        /// past it back for the next call.
+        /// </summary>
+        /// <remarks>
+        /// One helper for both of the paths that end a segment on a match: the loop's, when a
+        /// longer break string turned out not to follow, and the end-of-input one. They were
+        /// identical, and identical is how they have to stay — a change made to one and not the
+        /// other would move the reader's position on some inputs and not others.
+        /// </remarks>
+        private string TakeSegmentAndPushBackTail(StringBuilder segmentBuilder, int matchEndPosition)
+        {
+            string segment = segmentBuilder.ToString(0, matchEndPosition);
+
+            for (int i = matchEndPosition; i < segmentBuilder.Length; i++)
+            {
+                _unreadBuffer.Enqueue(segmentBuilder[i]);
+            }
+
+            return TrackPosition(segment);
         }
 
         /// <summary>

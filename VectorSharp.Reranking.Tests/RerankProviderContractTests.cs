@@ -13,7 +13,14 @@ namespace VectorSharp.Reranking.Tests
     /// </remarks>
     public abstract class RerankProviderContractTests
     {
-        protected static readonly string[] Documents =
+        /// <summary>
+        /// The candidate list every test below ranks. A fresh array each time rather than one
+        /// shared instance: <see cref="IRerankProvider"/>'s own remarks say that mutating the list
+        /// passed to a call invalidates every index it returned, and a static array a subclass or
+        /// a provider double could write into would carry that between tests, where the failure
+        /// would land in whichever test happened to run second.
+        /// </summary>
+        protected static string[] Documents =>
         [
             "cats sleep most of the day",
             "sorting a list in python",

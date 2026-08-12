@@ -16,6 +16,8 @@ dotnet add package VectorSharp.Chunking
 
 - **Stream-based** — reads character-by-character from any `TextReader`, holding one segment at a time rather than the whole file
 - **Token-bounded** — chunks respect a configurable token limit via your own token counter, except a single segment with no break point inside it, which is emitted whole and over the limit rather than cut
+
+> **Input with no break points at all is one segment, and one segment is held whole in memory.** Minified JavaScript, a base64 blob or a single-line CSV contains none of the configured break strings, so the chunker reads the entire file into one chunk — and an embedding service then sends that one chunk as a whole request. Nothing here caps it: the reader is bounded by the break strings you give it, so a format whose break strings do not occur is unbounded. Give such input break strings that do occur in it (`","`, `";"`, a fixed run of characters), or cap its size before it reaches the chunker.
 - **Position-aware** — `ReadChunksAsync` yields chunks that carry their offset in the source and their token count
 - **Format-aware** — ships with predefined break strings and stop signals for Markdown, C#, JavaScript/TypeScript/JSX/TSX, HTML, CSS, Python, and generic plain text
 - **Round-trip safe** — concatenating all chunks reproduces the original text exactly
@@ -70,6 +72,11 @@ pass.
 A `ChunkReader` is a single forward pass over its reader: it is consumed by enumerating it, and
 enumerating the same instance again throws `InvalidOperationException`. Create a new one to chunk
 the same input a second time.
+
+The throw is new in 1.1.0. Before it, a second enumeration returned an empty sequence — which
+looked like "this document has no chunks" rather than "this reader is spent", and after an
+abandoned pass it silently dropped the segment that pass had consumed but not yet yielded. Code
+that enumerated once, which is the only use that ever produced correct output, is unaffected.
 
 ## Configuration
 
@@ -181,18 +188,35 @@ using VectorSharp.Embedding;
 using VectorSharp.Embedding.NomicEmbed;
 
 await using EmbeddingService embedder = new EmbeddingService(NomicEmbedProvider.Create);
-using CosineVectorStore<int> store = VectorStore.Create<int>("docs", embedder.Dimension);
+using CosineVectorStore<long> store = VectorStore.Create<long>("docs", embedder.Dimension);
 
 using StreamReader reader = new StreamReader("document.md");
 ChunkReader chunker = ChunkReader.Create(reader, text => myTokenizer.CountTokens(text));
 
-int id = 0;
-await foreach (string chunk in chunker.ReadAllAsync())
+// Collect first, so the whole document goes to the embedder in one call rather than one call
+// per chunk. Against a remote embedding API that is the difference between one HTTP round trip
+// and one per chunk; the service splits the texts into provider-sized batches itself.
+List<TextChunk> chunks = new List<TextChunk>();
+await foreach (TextChunk chunk in chunker.ReadChunksAsync())
 {
-    float[] embedding = await embedder.EmbedAsync(chunk, EmbeddingPurpose.Document);
-    await store.AddAsync(id++, embedding);
+    chunks.Add(chunk);
+}
+
+float[][] embeddings = await embedder.EmbedBatchAsync(
+    chunks.Select(chunk => chunk.Text).ToList(),
+    EmbeddingPurpose.Document);
+
+for (int i = 0; i < chunks.Count; i++)
+{
+    // Keying on the offset rather than a running counter is what StartOffset is for: it points
+    // back into the source document, so a hit can be quoted or linked in context later.
+    await store.AddAsync(chunks[i].StartOffset, embeddings[i]);
 }
 ```
+
+`AddAsync` is keyed by the store's key type — `VectorStore.Create<long>` here, to match `StartOffset`. Use whatever key your own records are addressed by; the point is that the chunk carries enough to build one.
+
+If the document is large enough that holding every chunk in memory matters, batch as you go: fill a `List<TextChunk>` up to a few hundred entries, embed and store that, then clear it. What to avoid is a single `EmbedAsync` per chunk.
 
 ## API Reference
 

@@ -13,14 +13,7 @@ namespace VectorSharp.Embedding
         private readonly Task[] _workerTasks;
         private readonly IEmbeddingProvider[] _providers;
         private readonly CancellationTokenSource _cts;
-        /// <summary>
-        /// The configured limit, or 1 for a provider that does not batch. Named for being the
-        /// effective value rather than what the options say, which is what
-        /// <see cref="SplitIntoBatches"/> has to go by.
-        /// </summary>
-        private readonly int _effectiveMaxTextsPerBatch;
-
-        private readonly int _maxCharactersPerBatch;
+        private readonly BatchingPolicy _batchingPolicy;
         private int _disposed;
 
         /// <summary>
@@ -99,11 +92,9 @@ namespace VectorSharp.Embedding
 
             Dimension = _providers[0].Dimension;
 
-            // Grouping happens only for a provider that gains from it — see
-            // IEmbeddingProvider.SupportsBatching for why. Read from the first provider because
-            // the factory produces one kind of provider, which Dimension above already assumes.
-            _effectiveMaxTextsPerBatch = _providers[0].SupportsBatching ? effectiveOptions.MaxTextsPerBatch : 1;
-            _maxCharactersPerBatch = effectiveOptions.MaxCharactersPerBatch;
+            // The capability is read from the first provider because the factory produces one kind
+            // of provider, which Dimension above already assumes.
+            _batchingPolicy = BatchingPolicy.For(effectiveOptions, _providers[0].SupportsBatching);
 
             // Start worker tasks
             for (int i = 0; i < effectiveOptions.Concurrency; i++)
@@ -198,7 +189,7 @@ namespace VectorSharp.Embedding
                     throw new ArgumentNullException($"{nameof(texts)}[{i}]");
             }
 
-            IReadOnlyList<IReadOnlyList<string>> batches = SplitIntoBatches(texts);
+            IReadOnlyList<IReadOnlyList<string>> batches = _batchingPolicy.Split(texts);
 
             Task<EmbeddingResult>[] batchTasks = new Task<EmbeddingResult>[batches.Count];
             for (int i = 0; i < batches.Count; i++)
@@ -218,86 +209,10 @@ namespace VectorSharp.Embedding
                 }
             }
 
-            return new EmbeddingResult { Vectors = vectors, Usage = CombineUsage(batchResults) };
-        }
-
-        /// <summary>
-        /// Splits the texts into batches that respect both limits in the batching policy.
-        /// A single text over the character limit becomes a batch of its own rather than being
-        /// dropped or split, since only the caller can decide how to shorten it.
-        /// </summary>
-        private IReadOnlyList<IReadOnlyList<string>> SplitIntoBatches(IReadOnlyList<string> texts)
-        {
-            List<IReadOnlyList<string>> batches = new List<IReadOnlyList<string>>();
-            List<string> currentBatch = new List<string>();
-            long currentCharacters = 0;
-
-            foreach (string text in texts)
+            return new EmbeddingResult
             {
-                bool wouldExceedCount = currentBatch.Count >= _effectiveMaxTextsPerBatch;
-                bool wouldExceedCharacters = currentBatch.Count > 0 && currentCharacters + text.Length > _maxCharactersPerBatch;
-
-                if (wouldExceedCount || wouldExceedCharacters)
-                {
-                    batches.Add(currentBatch);
-                    currentBatch = new List<string>();
-                    currentCharacters = 0;
-                }
-
-                currentBatch.Add(text);
-                currentCharacters += text.Length;
-            }
-
-            if (currentBatch.Count > 0)
-                batches.Add(currentBatch);
-
-            return batches;
-        }
-
-        /// <summary>
-        /// Combines the usage of the batches one call was split into.
-        /// </summary>
-        /// <remarks>
-        /// Reports a total only when every batch reported one. A partial total would understate
-        /// what the call actually cost, and under-reporting spend is worse than reporting nothing:
-        /// null already means "unknown", which is what a partially reported call is.
-        /// </remarks>
-        private static EmbeddingUsage? CombineUsage(IReadOnlyList<EmbeddingResult> batchResults)
-        {
-            // Guards the loop below, which would otherwise total nothing up into a reported zero.
-            if (batchResults.Count == 0)
-                return null;
-
-            int totalTokens = 0;
-            string? model = null;
-            bool haveSeenABatch = false;
-            bool modelsAgree = true;
-
-            foreach (EmbeddingResult batchResult in batchResults)
-            {
-                if (batchResult.Usage == null)
-                    return null;
-
-                totalTokens += batchResult.Usage.TokenCount;
-
-                // Tracked with its own flag rather than by testing model for null, which cannot
-                // tell "no batch seen yet" from "this batch named no model" — and would then
-                // attribute the whole call to a model only one of the batches reported.
-                if (!haveSeenABatch)
-                {
-                    model = batchResult.Usage.Model;
-                    haveSeenABatch = true;
-                }
-                else if (batchResult.Usage.Model != model)
-                {
-                    modelsAgree = false;
-                }
-            }
-
-            return new EmbeddingUsage
-            {
-                TokenCount = totalTokens,
-                Model = modelsAgree ? model : null
+                Vectors = vectors,
+                Usage = EmbeddingUsage.Combine(batchResults.Select(batchResult => batchResult.Usage))
             };
         }
 
@@ -347,6 +262,14 @@ namespace VectorSharp.Embedding
         /// <summary>
         /// Stops all workers and disposes all provider instances.
         /// </summary>
+        /// <remarks>
+        /// Cancels the shutdown token and then waits for every worker to return, so a provider
+        /// call already in flight decides how long this takes. A provider that observes the
+        /// cancellation token it is handed makes disposal prompt; one that ignores it holds
+        /// disposal open for a full round trip, which against a remote API can be seconds. There
+        /// is deliberately no timeout: abandoning the wait would dispose a provider while a call
+        /// was still running inside it, which is worse than waiting.
+        /// </remarks>
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 1)
@@ -367,23 +290,38 @@ namespace VectorSharp.Embedding
             {
                 // Expected during shutdown
             }
+            finally
+            {
+                // In a finally rather than after the catch, so that a worker failing in a way that
+                // is not a cancellation still leaves the providers disposed and the queued callers
+                // released. The constructor already goes to this trouble when the factory fails
+                // partway; letting a native ONNX session leak on a different failure would give
+                // that guarantee away. The worker's exception still propagates from here.
+                ReleaseAbandonedRequests();
 
-            // Whatever is still sitting in the channel now will never be picked up, because the
-            // workers have stopped. Each of those has a caller awaiting a completion source that
-            // nothing else will ever complete, so failing them here is what keeps disposal from
-            // leaving a caller waiting forever.
+                foreach (IEmbeddingProvider provider in _providers)
+                {
+                    provider.Dispose();
+                }
+
+                _cts.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Fails every request still sitting in the channel once the workers have stopped.
+        /// </summary>
+        /// <remarks>
+        /// Nothing will pick these up any more, and each one has a caller awaiting a completion
+        /// source that nothing else will ever complete. Failing them here is what keeps disposal
+        /// from leaving a caller waiting forever.
+        /// </remarks>
+        private void ReleaseAbandonedRequests()
+        {
             while (_channel.Reader.TryRead(out EmbeddingRequest? abandoned))
             {
                 abandoned.CompletionSource.TrySetException(new ObjectDisposedException(GetType().FullName));
             }
-
-            // Dispose providers
-            foreach (IEmbeddingProvider provider in _providers)
-            {
-                provider.Dispose();
-            }
-
-            _cts.Dispose();
         }
 
         private async Task RunWorkerAsync(IEmbeddingProvider provider, CancellationToken cancellationToken)

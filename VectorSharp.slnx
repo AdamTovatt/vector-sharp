@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="VectorSharp.Packaging.Tests/VectorSharp.Packaging.Tests.csproj" />
   <Project Path="VectorSharp.Embedding.NomicEmbed.Tests/VectorSharp.Embedding.NomicEmbed.Tests.csproj" />
   <Project Path="VectorSharp.Embedding.NomicEmbed/VectorSharp.Embedding.NomicEmbed.csproj" />
   <Project Path="VectorSharp.Embedding.Tests/VectorSharp.Embedding.Tests.csproj" />

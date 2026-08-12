@@ -68,20 +68,8 @@ namespace VectorSharp.Embedding.Tests
             Assert.Equal(2048, options.MaxCharactersPerBatch);
         }
 
-        [Fact]
-        public void Constructor_ZeroMaxTextsPerBatch_Throws()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new EmbeddingService(() => new TestEmbeddingProvider(),
-                    new EmbeddingServiceOptions { MaxTextsPerBatch = 0 }));
-        }
-
-        [Fact]
-        public void Constructor_ZeroMaxCharactersPerBatch_Throws()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new EmbeddingService(() => new TestEmbeddingProvider(),
-                    new EmbeddingServiceOptions { MaxCharactersPerBatch = 0 }));
-        }
+        // The service constructor's rejection of out-of-range options is tested in
+        // EmbeddingServiceTests, where the rest of its validation lives. This file is about the
+        // options type itself: its defaults, and that it keeps what it is given.
     }
 }

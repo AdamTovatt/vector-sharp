@@ -44,6 +44,12 @@ namespace VectorSharp.Reranking
         /// provider that validates inside an <c>async</c> method necessarily does the latter.
         /// Callers should await the call to observe it rather than expecting a throw at the call
         /// site.
+        ///
+        /// Implementations should also observe <paramref name="cancellationToken"/> before doing
+        /// any work, so that a token cancelled before the call throws
+        /// <see cref="OperationCanceledException"/> rather than spending a metered request whose
+        /// result the caller has already stopped waiting for. A provider that only reaches its
+        /// token at an HTTP call has already paid for the request by then.
         /// </remarks>
         Task<RerankResult> RerankAsync(string query, IReadOnlyList<string> documents, int topN, CancellationToken cancellationToken = default);
     }

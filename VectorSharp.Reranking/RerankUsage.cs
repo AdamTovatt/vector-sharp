@@ -6,10 +6,12 @@ namespace VectorSharp.Reranking
     /// usage record full of zeroes.
     /// </summary>
     /// <remarks>
-    /// Structurally identical to <c>VectorSharp.Embedding.EmbeddingUsage</c>, and deliberately a
+    /// Reads the same as <c>VectorSharp.Embedding.EmbeddingUsage</c> today, and is deliberately a
     /// separate type rather than a shared one: this package takes no dependencies, including on
     /// its sibling packages, so a caller can rerank without pulling in an embedding service it is
-    /// not using. Keep the two in step when either changes.
+    /// not using. The resemblance is a convenience for anyone reading both, not a contract —
+    /// what a rerank API meters is its own business, and a field added to one of the two does not
+    /// oblige the other.
     /// </remarks>
     public sealed class RerankUsage
     {
