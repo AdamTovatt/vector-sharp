@@ -15,14 +15,14 @@ dotnet add package VectorSharp.Chunking
 ## Features
 
 - **Stream-based** — reads character-by-character from any `TextReader`, holding one segment at a time rather than the whole file
-- **Token-bounded** — chunks respect a configurable token limit via your own token counter, except a single segment with no break point inside it, which is emitted whole and over the limit rather than cut
-
-> **Input with no break points at all is one segment, and one segment is held whole in memory.** Minified JavaScript, a base64 blob or a single-line CSV contains none of the configured break strings, so the chunker reads the entire file into one chunk — and an embedding service then sends that one chunk as a whole request. Nothing here caps it: the reader is bounded by the break strings you give it, so a format whose break strings do not occur is unbounded. Give such input break strings that do occur in it (`","`, `";"`, a fixed run of characters), or cap its size before it reaches the chunker.
+- **Token-bounded** — every chunk respects the configured token limit, counted by your own token counter. Text that runs past the limit with no break point in it is cut at the limit rather than emitted whole
 - **Position-aware** — `ReadChunksAsync` yields chunks that carry their offset in the source and their token count
 - **Format-aware** — ships with predefined break strings and stop signals for Markdown, C#, JavaScript/TypeScript/JSX/TSX, HTML, CSS, Python, and generic plain text
 - **Round-trip safe** — concatenating all chunks reproduces the original text exactly
 - **Stop signals** — headings, code blocks, and other structural elements always start a new chunk
 - **Zero dependencies** — pure text processing, no embedding or tokenizer dependency
+
+> **Memory, as distinct from chunk size.** Input containing none of the configured break strings — minified JavaScript, a base64 blob, a single-line CSV — is one segment, and a segment is accumulated whole before it is cut into chunks. The chunks that come out are within the limit, so nothing over-sized reaches an embedding API, but peak memory is still the size of the longest run of text with no break point in it. Give such input break strings that do occur in it (`","`, `";"`, a fixed run of characters) if that matters.
 
 ## Quick Start
 
@@ -34,7 +34,7 @@ ChunkReader chunker = ChunkReader.Create(reader, text => myTokenizer.CountTokens
 
 await foreach (string chunk in chunker.ReadAllAsync())
 {
-    // Each chunk is within the token limit and splits at natural boundaries
+    // Each chunk is within the token limit, splitting at break strings where it can
     float[] embedding = await embedder.EmbedAsync(chunk);
 }
 ```
@@ -73,10 +73,26 @@ A `ChunkReader` is a single forward pass over its reader: it is consumed by enum
 enumerating the same instance again throws `InvalidOperationException`. Create a new one to chunk
 the same input a second time.
 
-The throw is new in 1.1.0. Before it, a second enumeration returned an empty sequence — which
-looked like "this document has no chunks" rather than "this reader is spent", and after an
-abandoned pass it silently dropped the segment that pass had consumed but not yet yielded. Code
-that enumerated once, which is the only use that ever produced correct output, is unaffected.
+## Upgrading from 1.x
+
+The only published 1.x release is 1.0.0, so this is the whole of what changes for every upgrader.
+Two behaviours differ; no signature does.
+
+**`MaxTokensPerChunk` is a bound rather than a target.** In 1.0.0, a segment with no break point
+inside it was emitted whole however far over the limit it was; it is now cut at the limit. Text
+whose segments already fit chunks identically — the cut only reaches text that used to come back
+over the limit, which is text a model with a fixed context window would have rejected or silently
+truncated. Read the note under [How It Works](#how-it-works) on where a cut lands before relying
+on this, because it is not at a word boundary.
+
+**Enumerating a `ChunkReader` twice throws.** In 1.0.0, a second enumeration returned an empty
+sequence — which looked like "this document has no chunks" rather than "this reader is spent" —
+and after an abandoned pass it silently dropped the segment that pass had consumed but not yet
+yielded. Code that enumerated once, which is the only use that ever produced correct output, is
+unaffected.
+
+The public surface is otherwise source- and binary-compatible: nothing was removed or changed, and
+the `StreamReader` overload of `Create` is still there.
 
 ## Configuration
 
@@ -172,12 +188,19 @@ ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter, new ChunkReader
 ```
 TextReader ──▶ SegmentReader ──▶ ChunkReader ──▶ IAsyncEnumerable<TextChunk>
                (break strings)   (token limits,     or IAsyncEnumerable<string>
-                                  stop signals)
+                                  stop signals,
+                                  cutting)
 ```
 
 1. **Segment reading** — text is read character-by-character and split at break string boundaries. Longer break strings are matched first (e.g., `\n\n` is preferred over `\n`).
 
 2. **Chunk assembly** — segments are concatenated into chunks until adding the next segment would exceed the token limit. If a segment starts with a stop signal, it forces a new chunk to begin.
+
+3. **Cutting** — a segment that is over the limit on its own is cut into consecutive pieces that are not. The cut is found by measuring candidate prefixes with your token counter, so it lands where your tokenizer says the limit falls rather than at a guessed character count. The pieces still concatenate back into the original text, and each carries its own offset, so round-tripping and `StartOffset` hold across a cut.
+
+> **A cut lands at the token limit, not at anything you would call a boundary.** It is reached only by text that had no break point in it for long enough to run past the limit, and at that point there is nothing structural left to cut at. With a character- or subword-based counter — which is what real embedding models use — that means cutting mid-word: at a limit of 3 tokens, `"the quick brown fox jumps"` comes back as `"the quick br"`, `"own fox jump"`, `"s"`. A word-counting tokenizer never does this, because adding a character to a word does not raise its count, so a word counter is a poor model of what your provider will actually do.
+>
+> The one thing a cut will not do is divide a single character: it never falls between the two halves of a surrogate pair. It can still separate a base character from a combining mark that follows it. If you need cuts on grapheme or word boundaries, give the chunker break strings that occur in your text so the limit is never the thing that decides.
 
 ## End-to-End with VectorSharp
 

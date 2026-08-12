@@ -34,10 +34,13 @@ namespace VectorSharp.Chunking.Tests
             return new StreamReader(stream);
         }
 
-        internal static ChunkReader CreateReader(string input, IReadOnlyList<string> breakStrings, IReadOnlyList<string> stopSignals, int maxTokens = 10)
+        /// <param name="countTokens">The token counter to chunk by. Defaults to counting words,
+        /// which is what all but the token-bound tests want; those pass a counter that reaches the
+        /// limit at a position they can state exactly.</param>
+        internal static ChunkReader CreateReader(string input, IReadOnlyList<string> breakStrings, IReadOnlyList<string> stopSignals, int maxTokens = 10, Func<string, int>? countTokens = null)
         {
             StreamReader streamReader = ReaderFrom(input);
-            return ChunkReader.Create(streamReader, TokenCounter.CountWords, new ChunkReaderOptions
+            return ChunkReader.Create(streamReader, countTokens ?? TokenCounter.CountWords, new ChunkReaderOptions
             {
                 MaxTokensPerChunk = maxTokens,
                 BreakStrings = breakStrings,

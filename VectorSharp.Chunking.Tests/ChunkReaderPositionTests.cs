@@ -133,10 +133,12 @@ namespace VectorSharp.Chunking.Tests
         }
 
         [Fact]
-        public async Task ReadChunksAsync_OversizedSegment_OffsetsStayCorrect()
+        public async Task ReadChunksAsync_SegmentCutAtTheLimit_OffsetsStayCorrect()
         {
-            // Neither line contains a break point, so each is emitted whole and over the limit,
-            // which is the branch that yields before reading its replacement segment.
+            // Neither line contains a break point, so each arrives over the limit and is cut. The
+            // offsets have to describe the pieces, not the segments they were cut from — a cut
+            // that left every piece carrying its segment's offset would still reconstruct the
+            // input and still point at the wrong place in it.
             string original = "one two three four five six seven eight nine ten\neleven twelve thirteen fourteen\n";
             using StringReader stringReader = new StringReader(original);
             ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
@@ -144,13 +146,9 @@ namespace VectorSharp.Chunking.Tests
 
             List<TextChunk> chunks = await ReadAllTextChunks(reader);
 
-            Assert.Equal(2, chunks.Count);
+            Assert.True(chunks.Count > 2);
             AssertLosslessWithOffsets(original, chunks);
-
-            // The type documents that an unbreakable segment comes back over the limit rather
-            // than being cut, so the counts here are above MaxTokensPerChunk by design.
-            Assert.Equal(10, chunks[0].TokenCount);
-            Assert.Equal(4, chunks[1].TokenCount);
+            Assert.All(chunks, chunk => Assert.True(chunk.TokenCount <= 3));
         }
 
         [Fact]
@@ -195,8 +193,10 @@ namespace VectorSharp.Chunking.Tests
             // track string.Length rather than characters a reader would count by eye.
             string original = "café ☕ naïve\n👨‍👩‍👧 family emoji 🎉\nlast line here\n";
             using StringReader stringReader = new StringReader(original);
+            // Four, so that the longest line fits and no line is cut. What offsets do across a cut
+            // is ChunkReaderTokenBoundTests' subject; this one is about the unit they are in.
             ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 3, BreakStrings = ["\n"], StopSignals = [] });
+                new ChunkReaderOptions { MaxTokensPerChunk = 4, BreakStrings = ["\n"], StopSignals = [] });
 
             List<TextChunk> chunks = await ReadAllTextChunks(reader);
 
