@@ -49,6 +49,15 @@ namespace VectorSharp.Embedding
         /// <returns>A float array of length <see cref="Dimension"/> representing the embedding.</returns>
         Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default);
 
+        // Deliberately a virtual interface member, not an extension method over
+        // EmbedBatchWithUsageAsync. Folding it in would tidy the shape — there would be no way
+        // left to override the wrong one of the two — at the cost of the case this member exists
+        // for: a provider that batches but meters nothing can override this alone, and would
+        // otherwise have to implement a usage-shaped method to say it has no usage to report.
+        // That trade is the whole of the decision, and it does not improve with age: an interface
+        // member is a signature callers bind to, so removing one is a break for anything compiled
+        // against a version that had it.
+
         /// <summary>
         /// Produces vector embeddings for several texts in one call.
         /// </summary>
@@ -59,14 +68,6 @@ namespace VectorSharp.Embedding
         /// between one HTTP round trip and one per text — and set
         /// <see cref="SupportsBatching"/> to true so the service groups texts for it.
         /// </remarks>
-        // Deliberately a virtual interface member, not an extension method over
-        // EmbedBatchWithUsageAsync. Folding it in would tidy the shape — there would be no way
-        // left to override the wrong one of the two — at the cost of the case this member exists
-        // for: a provider that batches but meters nothing can override this alone, and would
-        // otherwise have to implement a usage-shaped method to say it has no usage to report.
-        // Removing it stops being free once this ships as part of a released version, since
-        // assemblies compiled against it bind to this signature, so decide against it once here
-        // rather than each time the shape is reviewed.
         /// <param name="texts">The texts to embed.</param>
         /// <param name="purpose">The intended purpose of the embeddings.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>

@@ -18,6 +18,7 @@ Where `{package}` is the lowercase package name and `{version}` is a valid semve
 | `embedding` | VectorSharp.Embedding |
 | `nomic-embed` | VectorSharp.Embedding.NomicEmbed |
 | `chunking` | VectorSharp.Chunking |
+| `reranking` | VectorSharp.Reranking |
 
 ## Publishing a Package
 
@@ -28,29 +29,9 @@ git push origin storage-v1.0.0
 
 This triggers the publish workflow which will build, run tests, pack the specified project with the given version, and push to nuget.org.
 
-## Examples
-
-```bash
-# Publish VectorSharp.Storage 1.0.0
-git tag storage-v1.0.0
-git push origin storage-v1.0.0
-
-# Publish VectorSharp.Storage 1.1.0 (independent of other packages)
-git tag storage-v1.1.0
-git push origin storage-v1.1.0
-
-# Publish VectorSharp.Embedding 1.0.0 (independent of other packages)
-git tag embedding-v1.0.0
-git push origin embedding-v1.0.0
-
-# Publish VectorSharp.Embedding.NomicEmbed 1.0.0
-git tag nomic-embed-v1.0.0
-git push origin nomic-embed-v1.0.0
-
-# Publish VectorSharp.Chunking 1.0.0
-git tag chunking-v1.0.0
-git push origin chunking-v1.0.0
-```
+Packages are versioned independently: a tag names one package and one version, and publishing one
+leaves the others alone. Take the prefix from the table above and the version from that project's
+`<Version>`.
 
 ## Prerequisites
 
@@ -58,6 +39,12 @@ A `NUGET_API_KEY` secret must be configured in the repository settings (Settings
 
 ## Adding a New Package
 
-1. Add the project to the solution
+1. Add both the package project and its test project to `VectorSharp.slnx`
 2. Add a new case in `.github/workflows/publish.yml` mapping the tag prefix to the project name
-3. Update the table above
+3. Update the tag prefix table above
+4. Add a row to the Packages table in the root `README.md` — a package missing from it is invisible
+   to anyone arriving at the repository
+5. Write the package's own `README.md`, and wire it up in the project file with both
+   `<PackageReadmeFile>README.md</PackageReadmeFile>` and
+   `<None Include="README.md" Pack="true" PackagePath="\" />`. Without the second, the build still
+   succeeds and the nuget.org listing renders blank

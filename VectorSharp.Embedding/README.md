@@ -19,7 +19,7 @@ This package contains the core abstractions and service. For a ready-to-use mode
 - **Channel-based architecture** — any code can request embeddings, workers process them in the background
 - **Configurable parallelism** — N concurrent workers, each with its own provider instance
 - **Real batching** — providers that embed an array in one call get whole batches under configurable size limits, so a remote API sees one request rather than one per text; providers that do not stay one text per call, spread across workers
-- **Usage reporting** — providers that meter tokens report them back; providers that do not report nothing, never a zero
+- **Usage reporting** — a provider that meters tokens reports them back; one that does not reports nothing at all, rather than a zero you could mistake for a free call
 - **Backpressure** — a bounded channel caps how many batches wait to be picked up, so a queue cannot outgrow it faster than the workers drain it
 - **Provider-agnostic** — implement `IEmbeddingProvider` for any embedding source
 - **Purpose-aware** — `EmbeddingPurpose.Document` vs `EmbeddingPurpose.Query` for models that distinguish between them

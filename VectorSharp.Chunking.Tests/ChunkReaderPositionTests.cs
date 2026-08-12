@@ -88,6 +88,20 @@ namespace VectorSharp.Chunking.Tests
         }
 
         [Fact]
+        public async Task ReadChunksAsync_NoChunks_YieldsNullFromFirstOrDefaultRatherThanAnEmptyChunk()
+        {
+            // Why TextChunk is a class: as a struct this would hand back a chunk whose Text is
+            // null despite being non-nullable, and whose EndOffset throws. Asserted through
+            // behaviour so that changing the type back reddens a test rather than passing quietly.
+            using StringReader stringReader = new StringReader("");
+            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords);
+
+            List<TextChunk> chunks = await ReadAllTextChunks(reader);
+
+            Assert.Null(chunks.FirstOrDefault());
+        }
+
+        [Fact]
         public async Task ReadChunksAsync_FirstChunk_StartsAtZero()
         {
             using StringReader stringReader = new StringReader("one. two. three. four. five. six.");
