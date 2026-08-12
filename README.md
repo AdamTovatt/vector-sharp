@@ -3,7 +3,7 @@
 [![Tests](https://github.com/AdamTovatt/vector-sharp/actions/workflows/dotnet.yml/badge.svg)](https://github.com/AdamTovatt/vector-sharp/actions/workflows/dotnet.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance .NET library for in-process vector similarity search and text embedding. No external services, no Docker, no infrastructure — just NuGet packages that work.
+A high-performance .NET library for in-process vector similarity search and text embedding. No external services required, no Docker, no infrastructure — just NuGet packages that work. Search, storage and chunking run entirely in your process; the embedding and reranking packages let you reach a hosted API when you want one, but never oblige you to.
 
 ## Packages
 

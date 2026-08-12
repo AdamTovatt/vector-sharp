@@ -65,7 +65,13 @@ Caller ──EmbedAsync────────▶ one batch of one ──┐
 - N workers consume from the channel, each owning its own `IEmbeddingProvider` instance
 - One queued item is one batch, so a batch is one provider call rather than one per text
 - A failing batch fails only that batch; other batches and the workers carry on
-- Disposal completes the channel, drains workers, and disposes all providers
+- Disposal completes the channel, drains workers, and disposes all providers. Any batch still
+  queued at that point is failed with `ObjectDisposedException` rather than left awaiting a worker
+  that has stopped
+- **Disposal waits for whatever call is already inside a provider, with no timeout.** Observe the
+  `CancellationToken` you are handed and disposal is prompt; ignore it and disposal takes as long
+  as your slowest round trip. There is deliberately no bound — abandoning the wait would dispose a
+  provider with a call still running inside it
 
 ## Batching
 

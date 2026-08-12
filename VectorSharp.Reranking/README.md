@@ -146,6 +146,13 @@ If the API behind a provider caps how many candidates it accepts, refuse a longe
 truncating it. Truncation leaves every returned index valid while candidates vanish, which is the
 one failure the caller has no way to notice.
 
+Observe the `CancellationToken` before doing any work, so that a token already cancelled when the
+call arrives throws instead of spending a metered request nobody is waiting for.
+
+**As a caller:** `await` the call to see an argument rejection. A provider that validates inside an
+`async` method necessarily returns a faulted task rather than throwing at the call site, so a
+synchronous `try`/`catch` wrapped around the call itself catches nothing.
+
 ## Where It Fits
 
 ```

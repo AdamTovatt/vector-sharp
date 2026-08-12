@@ -85,13 +85,17 @@ namespace VectorSharp.Embedding.Tests
 
         private const int VectorLength = 8;
 
-        /// <param name="recorder">Collects what every instance of this provider received.</param>
+        /// <param name="recorder">Collects what every instance of this provider received. Omit it
+        /// in a test that does not read what arrived: the provider then records into one of its
+        /// own, so the test's Arrange block holds only what the test is actually about. Pass one
+        /// whenever the assertions look at the calls, since the service builds a provider per
+        /// worker and only a shared recorder sees all of them.</param>
         /// <param name="usageForBatch">Produces the usage this provider reports for a batch, or
         /// null to report none. Null by default, which is the local-model case.</param>
         /// <param name="supportsBatching">Whether this provider tells the service it batches.</param>
-        public BatchRecordingProvider(BatchRecorder recorder, Func<IReadOnlyList<string>, EmbeddingUsage?>? usageForBatch = null, bool supportsBatching = true)
+        public BatchRecordingProvider(BatchRecorder? recorder = null, Func<IReadOnlyList<string>, EmbeddingUsage?>? usageForBatch = null, bool supportsBatching = true)
         {
-            _recorder = recorder;
+            _recorder = recorder ?? new BatchRecorder();
             _usageForBatch = usageForBatch;
             SupportsBatching = supportsBatching;
         }
@@ -120,17 +124,35 @@ namespace VectorSharp.Embedding.Tests
         }
 
         /// <summary>
-        /// A vector whose first element identifies the text it came from, so a test can tell
-        /// whether vectors came back matched to the texts that produced them.
+        /// A vector that identifies the text it came from, so a test can tell whether vectors came
+        /// back matched to the texts that produced them.
         /// </summary>
+        /// <remarks>
+        /// Every element is derived from the whole string, in order. An earlier version stored the
+        /// length and a plain sum of the characters, which is equal for any two anagrams and for
+        /// any two same-length strings whose characters happen to add up the same — so a test
+        /// asserting that vectors came back in input order held only while its literals happened
+        /// to avoid the collision, and adding one more text could silently stop it detecting
+        /// misordering. <c>VectorFor_DistinguishesTextsAPlainLengthAndSumWouldNot</c> pins this.
+        /// </remarks>
         public static float[] VectorFor(string text)
         {
             float[] vector = new float[VectorLength];
-            vector[0] = text.Length;
-            for (int i = 0; i < text.Length; i++)
+
+            // FNV-1a over the text, then one further round per element, so position matters and
+            // every element depends on every character.
+            uint hash = 2166136261;
+            foreach (char character in text)
             {
-                vector[1] += text[i];
+                hash = (hash ^ character) * 16777619;
             }
+
+            for (int i = 0; i < VectorLength; i++)
+            {
+                hash = (hash ^ (uint)i) * 16777619;
+                vector[i] = hash % 65536;
+            }
+
             return vector;
         }
 

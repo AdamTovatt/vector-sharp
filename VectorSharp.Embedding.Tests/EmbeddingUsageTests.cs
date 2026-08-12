@@ -12,8 +12,7 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedBatchWithUsageAsync_ProviderReportsNothing_UsageIsNullNotZero()
         {
-            BatchRecorder recorder = new BatchRecorder();
-            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder));
+            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync(["a", "b"]);
 
@@ -37,8 +36,7 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedWithUsageAsync_ProviderReportsNothing_UsageIsNullNotZero()
         {
-            BatchRecorder recorder = new BatchRecorder();
-            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder));
+            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
 
             EmbeddingResult result = await service.EmbedWithUsageAsync("a");
 
@@ -48,9 +46,8 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedBatchWithUsageAsync_EmptyList_ReturnsNoVectorsAndNoUsage()
         {
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => TokensPerText(batch)));
+                () => new BatchRecordingProvider(usageForBatch: batch => TokensPerText(batch)));
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync([]);
 
@@ -67,9 +64,8 @@ namespace VectorSharp.Embedding.Tests
         {
             // The other half of "null means unknown, never free": a reported zero is a real
             // measurement and has to arrive as one, or the distinction the null carries is empty.
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => new EmbeddingUsage { TokenCount = 0, Model = "free-tier" }));
+                () => new BatchRecordingProvider(usageForBatch: batch => new EmbeddingUsage { TokenCount = 0, Model = "free-tier" }));
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync(["a", "b"]);
 
@@ -81,9 +77,8 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedBatchWithUsageAsync_ProviderReportsUsage_PassesItThrough()
         {
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => TokensPerText(batch)));
+                () => new BatchRecordingProvider(usageForBatch: batch => TokensPerText(batch)));
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync(["a", "b", "c"]);
 
@@ -95,9 +90,8 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedWithUsageAsync_ProviderReportsUsage_PassesItThrough()
         {
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => TokensPerText(batch)));
+                () => new BatchRecordingProvider(usageForBatch: batch => TokensPerText(batch)));
 
             EmbeddingResult result = await service.EmbedWithUsageAsync("a");
 
@@ -140,6 +134,112 @@ namespace VectorSharp.Embedding.Tests
 
         #endregion
 
+        #region Combine, directly
+
+        [Fact]
+        public void Combine_NothingToCombine_IsNullRatherThanAReportedZero()
+        {
+            // Reachable through the service only as the empty-input case, which returns before it
+            // gets here — but it is the case the whole type guards: totalling nothing up would
+            // produce a usage record saying the call cost zero, which means "this was free"
+            // rather than "nothing was reported".
+            Assert.Null(EmbeddingUsage.Combine([]));
+        }
+
+        [Fact]
+        public void Combine_OneBatch_PassesItThrough()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine([new EmbeddingUsage { TokenCount = 7, Model = "m" }]);
+
+            Assert.NotNull(combined);
+            Assert.Equal(7, combined.TokenCount);
+            Assert.Equal("m", combined.Model);
+        }
+
+        [Fact]
+        public void Combine_EveryBatchReported_SumsTheTokens()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                new EmbeddingUsage { TokenCount = 10, Model = "m" },
+                new EmbeddingUsage { TokenCount = 5, Model = "m" }
+            ]);
+
+            Assert.NotNull(combined);
+            Assert.Equal(15, combined.TokenCount);
+            Assert.Equal("m", combined.Model);
+        }
+
+        [Fact]
+        public void Combine_AnyBatchReportedNothing_IsNull()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                new EmbeddingUsage { TokenCount = 10, Model = "m" },
+                null
+            ]);
+
+            Assert.Null(combined);
+        }
+
+        [Fact]
+        public void Combine_LastBatchReportedNothing_IsNull()
+        {
+            // The other order, because a check that returned early on the first null would pass
+            // the case above and still total a partial spend when the gap comes last.
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                null,
+                new EmbeddingUsage { TokenCount = 10, Model = "m" }
+            ]);
+
+            Assert.Null(combined);
+        }
+
+        [Fact]
+        public void Combine_BatchesDisagreeOnTheModel_KeepsTheTotalAndDropsTheName()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                new EmbeddingUsage { TokenCount = 10, Model = "m1" },
+                new EmbeddingUsage { TokenCount = 10, Model = "m2" }
+            ]);
+
+            Assert.NotNull(combined);
+            Assert.Equal(20, combined.TokenCount);
+            Assert.Null(combined.Model);
+        }
+
+        [Fact]
+        public void Combine_FirstBatchNamedNoModel_DoesNotBorrowALaterOnesName()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                new EmbeddingUsage { TokenCount = 10, Model = null },
+                new EmbeddingUsage { TokenCount = 10, Model = "m" }
+            ]);
+
+            Assert.NotNull(combined);
+            Assert.Equal(20, combined.TokenCount);
+            Assert.Null(combined.Model);
+        }
+
+        [Fact]
+        public void Combine_EveryBatchNamedNoModel_KeepsTheTotalAndReportsNoModel()
+        {
+            EmbeddingUsage? combined = EmbeddingUsage.Combine(
+            [
+                new EmbeddingUsage { TokenCount = 10, Model = null },
+                new EmbeddingUsage { TokenCount = 10, Model = null }
+            ]);
+
+            Assert.NotNull(combined);
+            Assert.Equal(20, combined.TokenCount);
+            Assert.Null(combined.Model);
+        }
+
+        #endregion
+
         #region Combining across batches
 
         [Fact]
@@ -169,9 +269,8 @@ namespace VectorSharp.Embedding.Tests
         {
             // The two are not the same model just because one of them declined to say. Attributing
             // the whole call to the only name that turned up would misreport spend per model.
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => TokensPerText(batch, model: batch.Contains("unnamed") ? null : "model-x")),
+                () => new BatchRecordingProvider(usageForBatch: batch => TokensPerText(batch, model: batch.Contains("unnamed") ? null : "model-x")),
                 new EmbeddingServiceOptions { MaxTextsPerBatch = 1, Concurrency = 1 });
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync(["unnamed", "named", "also named"]);
@@ -185,9 +284,8 @@ namespace VectorSharp.Embedding.Tests
         public async Task EmbedBatchWithUsageAsync_BatchesReportDifferentModels_DropsTheModelButKeepsTheTotal()
         {
             int batchNumber = 0;
-            BatchRecorder recorder = new BatchRecorder();
             await using EmbeddingService service = new EmbeddingService(
-                () => new BatchRecordingProvider(recorder, batch => new EmbeddingUsage
+                () => new BatchRecordingProvider(usageForBatch: batch => new EmbeddingUsage
                 {
                     TokenCount = 10,
                     Model = $"model-{Interlocked.Increment(ref batchNumber)}"
@@ -208,8 +306,7 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedWithUsageAsync_NullText_Throws()
         {
-            BatchRecorder recorder = new BatchRecorder();
-            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder));
+            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
 
             await Assert.ThrowsAsync<ArgumentNullException>(() => service.EmbedWithUsageAsync(null!));
         }
@@ -217,8 +314,7 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedWithUsageAsync_AfterDispose_Throws()
         {
-            BatchRecorder recorder = new BatchRecorder();
-            EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder));
+            EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
             await service.DisposeAsync();
 
             await Assert.ThrowsAsync<ObjectDisposedException>(() => service.EmbedWithUsageAsync("a"));
@@ -227,8 +323,7 @@ namespace VectorSharp.Embedding.Tests
         [Fact]
         public async Task EmbedBatchWithUsageAsync_AfterDispose_Throws()
         {
-            BatchRecorder recorder = new BatchRecorder();
-            EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder));
+            EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
             await service.DisposeAsync();
 
             await Assert.ThrowsAsync<ObjectDisposedException>(() => service.EmbedBatchWithUsageAsync(["a"]));

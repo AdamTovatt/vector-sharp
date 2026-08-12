@@ -91,7 +91,11 @@ namespace VectorSharp.Embedding.Tests
             await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider(recorder),
                 new EmbeddingServiceOptions { MaxTextsPerBatch = 2, Concurrency = 4 });
 
-            string[] texts = ["alpha", "bb", "cccccc", "dddd", "e", "ffffffff", "ggg"];
+            // Deliberately including same-length texts and an anagram pair. Literals of seven
+            // distinct lengths would let this pass against a provider double whose vector only
+            // encoded the length, so the misordering it exists to catch has to be catchable
+            // without relying on the inputs happening to differ in an easy way.
+            string[] texts = ["alpha", "bravo", "ab", "ba", "cccccc", "e", "ggg"];
 
             float[][] vectors = await service.EmbedBatchAsync(texts);
 
@@ -158,7 +162,19 @@ namespace VectorSharp.Embedding.Tests
 
             await service.EmbedBatchAsync(Texts(2));
 
+            Assert.Single(recorder.Calls);
             Assert.Equal(EmbeddingPurpose.Document, recorder.Calls[0].Purpose);
+        }
+
+        [Fact]
+        public void VectorFor_DistinguishesTextsAPlainLengthAndSumWouldNot()
+        {
+            // The property the order assertions above rest on. Both of these pairs are equal under
+            // "length plus sum of characters", so a double encoding only that would hand back
+            // identical vectors for different texts and every ordering assertion would hold
+            // whatever order the vectors came back in.
+            Assert.NotEqual(BatchRecordingProvider.VectorFor("ab"), BatchRecordingProvider.VectorFor("ba"));
+            Assert.NotEqual(BatchRecordingProvider.VectorFor("ac"), BatchRecordingProvider.VectorFor("bb"));
         }
 
         #endregion
@@ -248,27 +264,30 @@ namespace VectorSharp.Embedding.Tests
             // The combination the interface documents: EmbedBatchAsync overridden,
             // EmbedBatchWithUsageAsync inherited. The service calls the usage method, whose default
             // routes into the overridden one, so the batch stays a single call and reports nothing.
-            BatchingOnlyProvider provider = new BatchingOnlyProvider();
-            await using EmbeddingService service = new EmbeddingService(() => provider,
+            BatchRecorder recorder = new BatchRecorder();
+            await using EmbeddingService service = new EmbeddingService(() => new BatchingOnlyProvider(recorder),
                 new EmbeddingServiceOptions { MaxTextsPerBatch = 64 });
 
             EmbeddingResult result = await service.EmbedBatchWithUsageAsync(Texts(5));
 
             Assert.Equal(5, result.Vectors.Count);
             Assert.Null(result.Usage);
-            Assert.Equal([5], provider.ReceivedBatchSizes);
-            Assert.Equal(0, provider.SingleCallCount);
+            Assert.Equal([5], recorder.Batches.Select(batch => batch.Count));
+            Assert.Equal(0, recorder.SingleCallCount);
         }
 
         [Fact]
         public async Task DefaultEmbedBatchAsync_CalledDirectlyOnTheInterface_LoopsTheSingleTextMethod()
         {
-            IEmbeddingProvider provider = new TestEmbeddingProvider(dimension: 16);
+            TestEmbeddingProvider provider = new TestEmbeddingProvider(dimension: 16);
 
-            float[][] vectors = await provider.EmbedBatchAsync(["a", "b"]);
+            float[][] vectors = await ((IEmbeddingProvider)provider).EmbedBatchAsync(["a", "b"]);
 
+            // The call count is what says "loops the single-text method". Comparing the batch's
+            // vectors against a fresh EmbedAsync would pass for any implementation that is merely
+            // deterministic, including one that never called EmbedAsync at all.
+            Assert.Equal(2, provider.CallCount);
             Assert.Equal(2, vectors.Length);
-            Assert.Equal(await provider.EmbedAsync("a"), vectors[0]);
         }
 
         [Fact]
@@ -315,6 +334,33 @@ namespace VectorSharp.Embedding.Tests
                 service.EmbedBatchAsync(["fine", null!]));
 
             Assert.Empty(recorder.Batches);
+        }
+
+        [Fact]
+        public async Task EmbedBatchWithUsageAsync_NullList_Throws()
+        {
+            // Its own public entry point with its own documented ArgumentNullException, not just
+            // the path EmbedBatchAsync happens to reach it through.
+            await using EmbeddingService service = new EmbeddingService(() => new BatchRecordingProvider());
+
+            await Assert.ThrowsAsync<ArgumentNullException>(() => service.EmbedBatchWithUsageAsync(null!));
+        }
+
+        [Fact]
+        public async Task MaxCharactersPerBatch_ProviderThatDoesNotBatch_ChangesNothing()
+        {
+            // The README says the character limit is only reached by a provider that batches,
+            // because one text is already a whole request for a provider that does not. A limit
+            // low enough to split these texts several ways still leaves one text per call.
+            BatchRecorder recorder = new BatchRecorder();
+            await using EmbeddingService service = new EmbeddingService(
+                () => new BatchRecordingProvider(recorder, supportsBatching: false),
+                new EmbeddingServiceOptions { MaxTextsPerBatch = 64, MaxCharactersPerBatch = 1 });
+
+            await service.EmbedBatchAsync(Texts(4, lengthEach: 10));
+
+            Assert.Equal(4, recorder.Batches.Count);
+            Assert.All(recorder.Batches, batch => Assert.Single(batch));
         }
 
         [Fact]
@@ -377,6 +423,23 @@ namespace VectorSharp.Embedding.Tests
         }
 
         [Fact]
+        public async Task EmbedBatchAsync_ProviderCancelsAgainstItsOwnToken_SurfacesTheProvidersFailure()
+        {
+            // The third of the worker's three OperationCanceledException catches, and the only one
+            // nothing else covers. Neither the caller's token nor the service's is cancelled here,
+            // so this is a failed call wearing a cancellation's exception type. The worker has to
+            // pass the provider's own exception through rather than replacing it with a
+            // cancellation of its own — the message is the only thing that tells a caller their
+            // provider timed out rather than something in here deciding to stop.
+            await using EmbeddingService service = new EmbeddingService(() => new SelfCancellingProvider());
+
+            OperationCanceledException failure = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                service.EmbedBatchAsync(Texts(2)));
+
+            Assert.Equal(SelfCancellingProvider.FailureMessage, failure.Message);
+        }
+
+        [Fact]
         public async Task EmbedBatchAsync_TokenAlreadyCancelled_Throws()
         {
             BatchRecorder recorder = new BatchRecorder();
@@ -413,180 +476,6 @@ namespace VectorSharp.Embedding.Tests
             Assert.True(
                 failure is ObjectDisposedException or OperationCanceledException,
                 $"Expected the call to fail because the service was disposed, but it failed with {failure.GetType().Name}: {failure.Message}");
-        }
-
-        #endregion
-
-        #region Helpers
-
-        /// <summary>
-        /// Releases every waiter once enough calls have arrived, counting arrivals cumulatively
-        /// rather than tracking how many are inside at once — a call that has already returned
-        /// still counts. That is all the test using it needs, because a serialised path never
-        /// produces a second arrival while the first is held.
-        /// </summary>
-        private sealed class ArrivalLatch
-        {
-            private readonly int _arrivalsRequired;
-            private readonly TaskCompletionSource _reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            private int _arrivals;
-
-            public ArrivalLatch(int arrivalsRequired)
-            {
-                _arrivalsRequired = arrivalsRequired;
-            }
-
-            public Task ArriveAndWaitAsync()
-            {
-                if (Interlocked.Increment(ref _arrivals) >= _arrivalsRequired)
-                    _reached.TrySetResult();
-
-                return _reached.Task;
-            }
-        }
-
-        /// <summary>
-        /// A provider that only implements the single-text method, standing in for a local model.
-        /// </summary>
-        private sealed class LatchedSingleTextProvider : IEmbeddingProvider
-        {
-            private readonly ArrivalLatch _latch;
-
-            public int Dimension => 8;
-
-            public LatchedSingleTextProvider(ArrivalLatch latch)
-            {
-                _latch = latch;
-            }
-
-            public async Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                // Bounded and cancellable on purpose. If the calls are ever serialised the latch
-                // is never reached, and a wait that could not be broken out of would hang the
-                // service's disposal — and with it the whole test run — instead of failing.
-                await _latch.ArriveAndWaitAsync().WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
-                return new float[8];
-            }
-
-            public void Dispose() { }
-        }
-
-        /// <summary>
-        /// Reports whether the token the service handed it was the one the caller cancelled.
-        /// </summary>
-        private sealed class ObservedCancellationProvider : IEmbeddingProvider
-        {
-            public int Dimension => 8;
-
-            public bool SupportsBatching => true;
-
-            public TaskCompletionSource CallStarted { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            public TaskCompletionSource<bool> SawCancellation { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult(new float[8]);
-            }
-
-            public async Task<EmbeddingResult> EmbedBatchWithUsageAsync(IReadOnlyList<string> texts, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                CallStarted.TrySetResult();
-
-                try
-                {
-                    await Task.Delay(Timeout.Infinite, cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    SawCancellation.TrySetResult(true);
-                    throw;
-                }
-
-                throw new InvalidOperationException("Unreachable: the delay never completes on its own.");
-            }
-
-            public void Dispose() { }
-        }
-
-        /// <summary>
-        /// Batches but meters nothing: overrides only the plain batch method and inherits the
-        /// usage one.
-        /// </summary>
-        private sealed class BatchingOnlyProvider : IEmbeddingProvider
-        {
-            private readonly List<int> _receivedBatchSizes = new List<int>();
-            private int _singleCallCount;
-
-            public int Dimension => 8;
-
-            public bool SupportsBatching => true;
-
-            public IReadOnlyList<int> ReceivedBatchSizes
-            {
-                get
-                {
-                    lock (_receivedBatchSizes)
-                    {
-                        return _receivedBatchSizes.ToList();
-                    }
-                }
-            }
-
-            public int SingleCallCount => Volatile.Read(ref _singleCallCount);
-
-            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                Interlocked.Increment(ref _singleCallCount);
-                return Task.FromResult(new float[8]);
-            }
-
-            public Task<float[][]> EmbedBatchAsync(IReadOnlyList<string> texts, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                lock (_receivedBatchSizes)
-                {
-                    _receivedBatchSizes.Add(texts.Count);
-                }
-
-                float[][] vectors = new float[texts.Count][];
-                for (int i = 0; i < texts.Count; i++)
-                {
-                    vectors[i] = new float[8];
-                }
-
-                return Task.FromResult(vectors);
-            }
-
-            public void Dispose() { }
-        }
-
-        /// <summary>
-        /// A provider that drops a vector, the way a remote API would if it silently skipped an
-        /// input.
-        /// </summary>
-        private sealed class ShortResponseProvider : IEmbeddingProvider
-        {
-            public int Dimension => 8;
-
-            public bool SupportsBatching => true;
-
-            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult(new float[8]);
-            }
-
-            public Task<EmbeddingResult> EmbedBatchWithUsageAsync(IReadOnlyList<string> texts, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                float[][] vectors = new float[Math.Max(0, texts.Count - 1)][];
-                for (int i = 0; i < vectors.Length; i++)
-                {
-                    vectors[i] = new float[8];
-                }
-
-                return Task.FromResult(new EmbeddingResult { Vectors = vectors });
-            }
-
-            public void Dispose() { }
         }
 
         #endregion

@@ -19,28 +19,33 @@ namespace VectorSharp.Embedding.Tests
                 new EmbeddingService(null!));
         }
 
-        [Fact]
-        public void Constructor_ZeroConcurrency_Throws()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new EmbeddingService(() => new TestEmbeddingProvider(),
-                    new EmbeddingServiceOptions { Concurrency = 0 }));
-        }
+        // Every option the constructor range-checks, checked the same way. One theory rather than
+        // a test per option, so that an option added later without its guard is a missing row
+        // here rather than a case nobody noticed was absent — which is how MaxTextsPerBatch and
+        // MaxCharactersPerBatch ended up with half the coverage Concurrency had.
+        public static TheoryData<string, EmbeddingServiceOptions> OutOfRangeOptions =>
+            new TheoryData<string, EmbeddingServiceOptions>
+            {
+                { "Concurrency zero", new EmbeddingServiceOptions { Concurrency = 0 } },
+                { "Concurrency negative", new EmbeddingServiceOptions { Concurrency = -1 } },
+                { "ChannelCapacity zero", new EmbeddingServiceOptions { ChannelCapacity = 0 } },
+                { "ChannelCapacity negative", new EmbeddingServiceOptions { ChannelCapacity = -1 } },
+                { "MaxTextsPerBatch zero", new EmbeddingServiceOptions { MaxTextsPerBatch = 0 } },
+                { "MaxTextsPerBatch negative", new EmbeddingServiceOptions { MaxTextsPerBatch = -1 } },
+                { "MaxCharactersPerBatch zero", new EmbeddingServiceOptions { MaxCharactersPerBatch = 0 } },
+                { "MaxCharactersPerBatch negative", new EmbeddingServiceOptions { MaxCharactersPerBatch = -1 } },
+            };
 
-        [Fact]
-        public void Constructor_NegativeConcurrency_Throws()
+        /// <param name="description">Names the case in the test output. xUnit cannot render the
+        /// options object itself, so without this every row reports under the same name and a
+        /// failure does not say which option let a bad value through.</param>
+        /// <param name="options">The options the constructor has to reject.</param>
+        [Theory]
+        [MemberData(nameof(OutOfRangeOptions))]
+        public void Constructor_OptionBelowOne_Throws(string description, EmbeddingServiceOptions options)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new EmbeddingService(() => new TestEmbeddingProvider(),
-                    new EmbeddingServiceOptions { Concurrency = -1 }));
-        }
-
-        [Fact]
-        public void Constructor_ZeroChannelCapacity_Throws()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new EmbeddingService(() => new TestEmbeddingProvider(),
-                    new EmbeddingServiceOptions { ChannelCapacity = 0 }));
+                new EmbeddingService(() => new TestEmbeddingProvider(), options));
         }
 
         #endregion
@@ -231,51 +236,6 @@ namespace VectorSharp.Embedding.Tests
 
             await service.DisposeAsync();
             await service.DisposeAsync(); // Should not throw
-        }
-
-        #endregion
-
-        #region Helpers
-
-        private sealed class FailingProvider : IEmbeddingProvider
-        {
-            public int Dimension => 768;
-
-            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                throw new InvalidOperationException("Intentional test failure");
-            }
-
-            public void Dispose() { }
-        }
-
-        private sealed class SharedCounter
-        {
-            private int _value;
-            public int Value => _value;
-            public void Increment() => Interlocked.Increment(ref _value);
-        }
-
-        private sealed class CountingProvider : IEmbeddingProvider
-        {
-            private readonly SharedCounter _counter;
-
-            public int Dimension { get; }
-
-            public CountingProvider(int dimension, SharedCounter counter)
-            {
-                Dimension = dimension;
-                _counter = counter;
-            }
-
-            public Task<float[]> EmbedAsync(string text, EmbeddingPurpose purpose = EmbeddingPurpose.Document, CancellationToken cancellationToken = default)
-            {
-                _counter.Increment();
-                float[] result = new float[Dimension];
-                return Task.FromResult(result);
-            }
-
-            public void Dispose() { }
         }
 
         #endregion

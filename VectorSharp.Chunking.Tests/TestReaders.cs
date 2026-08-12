@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace VectorSharp.Chunking.Tests
 {
     /// <summary>
@@ -9,13 +11,26 @@ namespace VectorSharp.Chunking.Tests
     internal static class TestReaders
     {
         /// <summary>
+        /// A short document exercising every Markdown break string: headings, paragraphs and a
+        /// list. Shared because both chunk-reader test files read the same sample.
+        /// </summary>
+        internal const string MarkdownSample = "# Title\n\nFirst paragraph with text. More sentences here.\n\n## Section\n\n- item one\n- item two\n\nFinal paragraph.\n";
+
+        internal static ChunkReaderOptions MarkdownOptions(int maxTokens) => new ChunkReaderOptions
+        {
+            MaxTokensPerChunk = maxTokens,
+            BreakStrings = BreakStrings.Markdown,
+            StopSignals = StopSignals.Markdown
+        };
+
+        /// <summary>
         /// Wraps text in a <see cref="StreamReader"/>, which keeps a real stream and its decoding
         /// in the picture. Tests specifically about which reader type is accepted use the
         /// <see cref="StringReader"/> directly instead.
         /// </summary>
         internal static StreamReader ReaderFrom(string text)
         {
-            MemoryStream stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
+            MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
             return new StreamReader(stream);
         }
 

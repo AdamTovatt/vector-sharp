@@ -1,16 +1,15 @@
+using System.Text;
+
 namespace VectorSharp.Chunking.Tests
 {
+    /// <summary>
+    /// What <see cref="ChunkReader.ReadChunksAsync"/> adds over <see cref="ChunkReader.ReadAllAsync"/>:
+    /// each chunk's position in the input and its token count. Everything the two enumerations
+    /// share — which readers Create accepts, the single-pass rule, cancellation — is in
+    /// <see cref="ChunkReaderTests"/>, since it is not about position.
+    /// </summary>
     public class ChunkReaderPositionTests
     {
-        private const string MarkdownSample = "# Title\n\nFirst paragraph with text. More sentences here.\n\n## Section\n\n- item one\n- item two\n\nFinal paragraph.\n";
-
-        private static ChunkReaderOptions MarkdownOptions(int maxTokens) => new ChunkReaderOptions
-        {
-            MaxTokensPerChunk = maxTokens,
-            BreakStrings = BreakStrings.Markdown,
-            StopSignals = StopSignals.Markdown
-        };
-
         /// <summary>
         /// Asserts the two properties that make offsets trustworthy: the chunks concatenate back
         /// into the input exactly, and every chunk's offsets point at that chunk's own text in
@@ -41,38 +40,6 @@ namespace VectorSharp.Chunking.Tests
             if (chunks.Count > 0)
                 Assert.Equal(original.Length, chunks[^1].EndOffset);
         }
-
-        #region Create (reader types)
-
-        [Fact]
-        public async Task Create_StringReader_ReadsChunks()
-        {
-            using StringReader stringReader = new StringReader("hello world");
-            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 10, BreakStrings = ["\n"], StopSignals = [] });
-
-            List<TextChunk> chunks = await ReadAllTextChunks(reader);
-
-            Assert.Single(chunks);
-            Assert.Equal("hello world", chunks[0].Text);
-        }
-
-        [Fact]
-        public async Task Create_StringReader_MatchesStreamReaderOutput()
-        {
-            using StringReader stringReader = new StringReader(MarkdownSample);
-            List<TextChunk> fromString = await ReadAllTextChunks(
-                ChunkReader.Create(stringReader, TokenCounter.CountWords, MarkdownOptions(10)));
-
-            using StreamReader streamReader = ReaderFrom(MarkdownSample);
-            List<TextChunk> fromStream = await ReadAllTextChunks(
-                ChunkReader.Create(streamReader, TokenCounter.CountWords, MarkdownOptions(10)));
-
-            Assert.Equal(fromStream.Select(chunk => chunk.Text), fromString.Select(chunk => chunk.Text));
-            Assert.Equal(fromStream.Select(chunk => chunk.StartOffset), fromString.Select(chunk => chunk.StartOffset));
-        }
-
-        #endregion
 
         #region ReadChunksAsync (basic behavior)
 
@@ -128,52 +95,6 @@ namespace VectorSharp.Chunking.Tests
                 ChunkReader.Create(stringSource, TokenCounter.CountWords, MarkdownOptions(5)));
 
             Assert.Equal(strings, chunks.Select(chunk => chunk.Text));
-        }
-
-        #endregion
-
-        #region ReadChunksAsync (single pass)
-
-        [Fact]
-        public async Task ReadChunksAsync_SecondEnumeration_Throws()
-        {
-            using StringReader stringReader = new StringReader("one. two. three. four. five. six.");
-            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 2, BreakStrings = [". "], StopSignals = [] });
-
-            await ReadAllTextChunks(reader);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAllTextChunks(reader));
-        }
-
-        [Fact]
-        public async Task ReadChunksAsync_AbandonedThenReEnumerated_Throws()
-        {
-            // The abandoned pass has already consumed a segment it never yielded. Continuing
-            // would drop that text and mislabel everything after it, so the second pass is
-            // refused rather than left to produce chunks that reconstruct nothing.
-            using StringReader stringReader = new StringReader("aa bb cc\ndd ee ff\ngg hh ii\njj kk ll\n");
-            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 3, BreakStrings = ["\n"], StopSignals = [] });
-
-            await foreach (TextChunk chunk in reader.ReadChunksAsync())
-            {
-                break;
-            }
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAllTextChunks(reader));
-        }
-
-        [Fact]
-        public async Task ReadAllAsync_AfterReadChunksAsync_Throws()
-        {
-            using StringReader stringReader = new StringReader("one. two. three. four.");
-            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 2, BreakStrings = [". "], StopSignals = [] });
-
-            await ReadAllTextChunks(reader);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAllChunks(reader));
         }
 
         #endregion
@@ -249,7 +170,7 @@ namespace VectorSharp.Chunking.Tests
         [Fact]
         public async Task ReadChunksAsync_LongInput_OffsetsStayCorrectAcrossManyChunks()
         {
-            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+            StringBuilder builder = new StringBuilder();
             for (int i = 0; i < 200; i++)
             {
                 builder.Append($"Sentence number {i} of the document. ");
@@ -350,25 +271,5 @@ namespace VectorSharp.Chunking.Tests
 
         #endregion
 
-        #region ReadChunksAsync (cancellation)
-
-        [Fact]
-        public async Task ReadChunksAsync_CancelledToken_ThrowsOperationCancelled()
-        {
-            using StringReader stringReader = new StringReader("hello world this is some text\nmore text here\n");
-            ChunkReader reader = ChunkReader.Create(stringReader, TokenCounter.CountWords,
-                new ChunkReaderOptions { MaxTokensPerChunk = 2, BreakStrings = ["\n"], StopSignals = [] });
-            CancellationToken cancelled = new CancellationToken(true);
-
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            {
-                await foreach (TextChunk chunk in reader.ReadChunksAsync(cancelled))
-                {
-                    // Should not reach here
-                }
-            });
-        }
-
-        #endregion
     }
 }

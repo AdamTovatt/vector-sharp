@@ -20,10 +20,10 @@ namespace VectorSharp.Embedding
         /// <remarks>
         /// Counted in batches, not texts: one queued item is one batch of up to
         /// <see cref="MaxTextsPerBatch"/> texts. Against a provider that does not batch a batch is
-        /// one text, so the default bounds the queue at 1000 texts; against one that does, the
-        /// same default bounds it at 1000 batches, which is 64000 texts at the default
-        /// <see cref="MaxTextsPerBatch"/>. Lower this when the queued text itself is large enough
-        /// to matter, since the queue holds the strings until a worker takes them.
+        /// one text, so this bounds the queue at the same number of texts; against one that does,
+        /// the bound on texts is this multiplied by <see cref="MaxTextsPerBatch"/>. Lower this
+        /// when the queued text itself is large enough to matter, since the queue holds the
+        /// strings until a worker takes them.
         /// </remarks>
         public int ChannelCapacity { get; init; } = 1000;
 

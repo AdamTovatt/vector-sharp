@@ -90,6 +90,42 @@ namespace VectorSharp.Chunking.Tests
         }
 
         [Fact]
+        public async Task LastSegmentStartOffset_TracksEachSegmentAsItIsReturned()
+        {
+            using StreamReader streamReader = ReaderFrom("one. two. three");
+            SegmentReader reader = new SegmentReader(streamReader, [". "]);
+            List<long> offsets = new List<long>();
+
+            while (await reader.ReadNextAsync() != null)
+            {
+                offsets.Add(reader.LastSegmentStartOffset);
+            }
+
+            Assert.Equal([0L, 5L, 10L], offsets);
+        }
+
+        [Fact]
+        public async Task LastSegmentStartOffset_LookaheadPushedBack_IsNotCountedUntilItsSegmentIsReturned()
+        {
+            // The whole of what the property promises. Reading "hello\n\n" requires looking one
+            // character past the first "\n" to find out a longer break string follows, and the
+            // 'w' after "second\n" is read and pushed back the same way. A cursor advanced by what
+            // was read rather than by what was returned would put the second segment a character
+            // early and every one after it out by the same amount.
+            using StreamReader streamReader = ReaderFrom("hello\n\nsecond\nworld");
+            SegmentReader reader = new SegmentReader(streamReader, ["\n", "\n\n"]);
+            List<(string Segment, long Offset)> read = new List<(string, long)>();
+
+            string? segment;
+            while ((segment = await reader.ReadNextAsync()) != null)
+            {
+                read.Add((segment, reader.LastSegmentStartOffset));
+            }
+
+            Assert.Equal([("hello\n\n", 0L), ("second\n", 7L), ("world", 14L)], read);
+        }
+
+        [Fact]
         public async Task ReadNextAsync_CustomBreakStrings_Work()
         {
             using StreamReader streamReader = ReaderFrom("a---b---c");
