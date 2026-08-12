@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 
     <PackageId>VectorSharp.Chunking</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Title>VectorSharp.Chunking</Title>
     <Authors>Adam Tovatt</Authors>
-    <Description>Streaming text chunker that splits text into token-bounded chunks suitable for embedding. Ships with predefined formats for Markdown and C#. Zero dependencies.</Description>
+    <Description>Streaming text chunker that splits text into token-bounded chunks suitable for embedding. Chunks carry their offset in the source text and their token count. Ships with predefined formats for Markdown, C#, JavaScript/TypeScript, HTML, CSS, Python and plain text. Zero dependencies.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>vector;chunking;text-chunking;text-splitting;embedding;rag</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

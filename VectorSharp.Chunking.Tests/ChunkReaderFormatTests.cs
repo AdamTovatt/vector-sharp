@@ -2,33 +2,6 @@ namespace VectorSharp.Chunking.Tests
 {
     public class ChunkReaderFormatTests
     {
-        private static StreamReader ReaderFrom(string text)
-        {
-            MemoryStream stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
-            return new StreamReader(stream);
-        }
-
-        private static async Task<List<string>> ReadAllChunks(ChunkReader reader)
-        {
-            List<string> chunks = new List<string>();
-            await foreach (string chunk in reader.ReadAllAsync())
-            {
-                chunks.Add(chunk);
-            }
-            return chunks;
-        }
-
-        private static ChunkReader CreateReader(string input, IReadOnlyList<string> breakStrings, IReadOnlyList<string> stopSignals, int maxTokens = 10)
-        {
-            StreamReader streamReader = ReaderFrom(input);
-            return ChunkReader.Create(streamReader, TokenCounter.CountWords, new ChunkReaderOptions
-            {
-                MaxTokensPerChunk = maxTokens,
-                BreakStrings = breakStrings,
-                StopSignals = stopSignals
-            });
-        }
-
         #region PlainText
 
         [Fact]
