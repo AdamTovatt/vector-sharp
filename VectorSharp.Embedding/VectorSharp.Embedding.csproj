@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 
     <PackageId>VectorSharp.Embedding</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Title>VectorSharp.Embedding</Title>
     <Authors>Adam Tovatt</Authors>
-    <Description>Channel-based embedding service with configurable parallelism for VectorSharp. Provider-agnostic — supports local ONNX models, remote HTTP endpoints, or any custom embedding source.</Description>
+    <Description>Channel-based embedding service with configurable parallelism for VectorSharp. Batches texts into single provider requests for providers that support it, under configurable size limits, and reports provider token usage when the provider meters it. Provider-agnostic — supports local ONNX models, remote HTTP endpoints, or any custom embedding source.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>vector;embeddings;embedding-service;channels;parallelism</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
