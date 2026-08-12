@@ -14,13 +14,15 @@ namespace VectorSharp.Chunking
     public sealed class ChunkReader
     {
         private readonly SegmentReader _segmentReader;
+        private readonly ChunkSplitter _chunkSplitter;
         private readonly Func<string, int> _countTokens;
         private readonly ChunkReaderOptions _options;
         private int _enumerationStarted;
 
-        private ChunkReader(SegmentReader segmentReader, Func<string, int> countTokens, ChunkReaderOptions options)
+        private ChunkReader(SegmentReader segmentReader, ChunkSplitter chunkSplitter, Func<string, int> countTokens, ChunkReaderOptions options)
         {
             _segmentReader = segmentReader;
+            _chunkSplitter = chunkSplitter;
             _countTokens = countTokens;
             _options = options;
         }
@@ -56,7 +58,8 @@ namespace VectorSharp.Chunking
                 throw new ArgumentException("BreakStrings must contain at least one entry.", nameof(options));
 
             SegmentReader segmentReader = new SegmentReader(reader, effectiveOptions.BreakStrings);
-            return new ChunkReader(segmentReader, countTokens, effectiveOptions);
+            ChunkSplitter chunkSplitter = new ChunkSplitter(countTokens, effectiveOptions.MaxTokensPerChunk);
+            return new ChunkReader(segmentReader, chunkSplitter, countTokens, effectiveOptions);
         }
 
         /// <summary>
@@ -135,13 +138,24 @@ namespace VectorSharp.Chunking
 
                 if (current.TokenCount >= _options.MaxTokensPerChunk)
                 {
-                    yield return current.ToTextChunk();
+                    // Full, or past full. A segment with no break point inside it arrives here
+                    // whole however long it is, so this is the only place a chunk over the limit
+                    // could ever be produced, and the splitter is what stops one being produced.
+                    foreach (Cut cut in _chunkSplitter.Split(current.Text, current.TokenCount, cancellationToken))
+                    {
+                        yield return new TextChunk
+                        {
+                            Text = current.Text.Substring(cut.Start, cut.Length),
+                            StartOffset = current.StartOffset + cut.Start,
+                            TokenCount = cut.TokenCount
+                        };
+                    }
 
-                    string? nextAfterOversize = await _segmentReader.ReadNextAsync(cancellationToken);
-                    if (nextAfterOversize == null)
+                    string? nextAfterFullChunk = await _segmentReader.ReadNextAsync(cancellationToken);
+                    if (nextAfterFullChunk == null)
                         yield break;
 
-                    current = StartChunk(nextAfterOversize);
+                    current = StartChunk(nextAfterFullChunk);
                     continue;
                 }
 

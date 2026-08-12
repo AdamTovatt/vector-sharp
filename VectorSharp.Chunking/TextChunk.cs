@@ -30,8 +30,8 @@ namespace VectorSharp.Chunking
         /// <summary>
         /// Gets the number of tokens in <see cref="Text"/>, as counted by the token counter
         /// passed to <see cref="ChunkReader.Create(TextReader, Func{string, int}, ChunkReaderOptions)"/>.
-        /// May exceed <see cref="ChunkReaderOptions.MaxTokensPerChunk"/> when a single segment
-        /// with no break point inside it is already over the limit.
+        /// Bounded by <see cref="ChunkReaderOptions.MaxTokensPerChunk"/>, whose documentation
+        /// states the bound and the one counter that can defeat it.
         /// </summary>
         public required int TokenCount { get; init; }
 

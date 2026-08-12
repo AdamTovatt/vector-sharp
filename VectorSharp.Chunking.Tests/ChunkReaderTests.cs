@@ -145,7 +145,7 @@ namespace VectorSharp.Chunking.Tests
             List<string> chunks = await ReadAllChunks(reader);
 
             Assert.True(chunks.Count > 1);
-            Assert.All(chunks, chunk => Assert.True(TokenCounter.CountWords(chunk) <= 4)); // small overshoot possible for single segments
+            Assert.All(chunks, chunk => Assert.True(TokenCounter.CountWords(chunk) <= 4));
         }
 
         [Fact]
@@ -333,23 +333,26 @@ namespace VectorSharp.Chunking.Tests
 
             List<string> chunks = await ReadAllChunks(reader);
 
-            // Each chunk should be within the limit (except single oversized segments)
             Assert.True(chunks.Count > 1);
+            Assert.All(chunks, chunk => Assert.True(TokenCounter.CountWords(chunk) <= 3));
         }
 
         [Fact]
-        public async Task ReadAllAsync_SingleOversizedSegment_ReturnedAsIs()
+        public async Task ReadAllAsync_SingleOversizedSegment_IsCutAtTheLimit()
         {
-            // A segment with no break points that exceeds the token limit
-            using StreamReader streamReader = ReaderFrom("one two three four five six seven eight nine ten");
+            // A segment with no break point in it is cut at the limit rather than coming back
+            // whole, and the pieces still reproduce it exactly.
+            string input = "one two three four five six seven eight nine ten";
+            using StreamReader streamReader = ReaderFrom(input);
             ChunkReader reader = ChunkReader.Create(streamReader, TokenCounter.CountWords,
                 new ChunkReaderOptions { MaxTokensPerChunk = 3, BreakStrings = ["\n"], StopSignals = [] });
 
             List<string> chunks = await ReadAllChunks(reader);
 
-            // Should return the whole thing as one chunk since there are no break points
-            Assert.Single(chunks);
-            Assert.Equal("one two three four five six seven eight nine ten", chunks[0]);
+            Assert.True(chunks.Count > 1);
+            Assert.All(chunks, chunk => Assert.True(TokenCounter.CountWords(chunk) <= 3,
+                $"'{chunk}' counts {TokenCounter.CountWords(chunk)} tokens against a limit of 3."));
+            Assert.Equal(input, string.Join("", chunks));
         }
 
         #endregion
