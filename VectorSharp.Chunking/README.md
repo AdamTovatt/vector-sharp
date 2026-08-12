@@ -14,8 +14,9 @@ dotnet add package VectorSharp.Chunking
 
 ## Features
 
-- **Stream-based** — reads character-by-character, never loads the full file into memory
-- **Token-bounded** — chunks respect a configurable token limit via your own token counter
+- **Stream-based** — reads character-by-character from any `TextReader`, holding one segment at a time rather than the whole file
+- **Token-bounded** — chunks respect a configurable token limit via your own token counter, except a single segment with no break point inside it, which is emitted whole and over the limit rather than cut
+- **Position-aware** — `ReadChunksAsync` yields chunks that carry their offset in the source and their token count
 - **Format-aware** — ships with predefined break strings and stop signals for Markdown, C#, JavaScript/TypeScript/JSX/TSX, HTML, CSS, Python, and generic plain text
 - **Round-trip safe** — concatenating all chunks reproduces the original text exactly
 - **Stop signals** — headings, code blocks, and other structural elements always start a new chunk
@@ -35,6 +36,40 @@ await foreach (string chunk in chunker.ReadAllAsync())
     float[] embedding = await embedder.EmbedAsync(chunk);
 }
 ```
+
+Any `TextReader` works, so text already in memory needs no stream wrapper:
+
+```csharp
+using StringReader reader = new StringReader(documentText);
+ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter);
+```
+
+## Chunks With Position
+
+`ReadChunksAsync` yields `TextChunk` values instead of bare strings. Each one knows where it came
+from, which is what lets a search hit link back to its place in the source document:
+
+```csharp
+await foreach (TextChunk chunk in chunker.ReadChunksAsync())
+{
+    // chunk.StartOffset  — character offset from the start of the input
+    // chunk.EndOffset    — one past the last character, the next chunk's StartOffset
+    // chunk.TokenCount   — as counted by the token counter you supplied
+    float[] embedding = await embedder.EmbedAsync(chunk.Text);
+}
+```
+
+An offset is the position the chunk's text was read from, not an estimate reconstructed afterwards.
+Because the chunks reproduce the input exactly, it is also the sum of the lengths of all preceding
+chunks. Offsets are measured in UTF-16 code units, the same unit as `string.Length`, and typed as
+`long` because they accumulate over the whole input, which may run past `int.MaxValue` characters.
+
+`ReadAllAsync` yields the same text as `ReadChunksAsync` — it is the string-only view of the same
+pass.
+
+A `ChunkReader` is a single forward pass over its reader: it is consumed by enumerating it, and
+enumerating the same instance again throws `InvalidOperationException`. Create a new one to chunk
+the same input a second time.
 
 ## Configuration
 
@@ -128,9 +163,9 @@ ChunkReader chunker = ChunkReader.Create(reader, myTokenCounter, new ChunkReader
 ## How It Works
 
 ```
-StreamReader ──▶ SegmentReader ──▶ ChunkReader ──▶ IAsyncEnumerable<string>
-                 (break strings)   (token limits,
-                                    stop signals)
+TextReader ──▶ SegmentReader ──▶ ChunkReader ──▶ IAsyncEnumerable<TextChunk>
+               (break strings)   (token limits,     or IAsyncEnumerable<string>
+                                  stop signals)
 ```
 
 1. **Segment reading** — text is read character-by-character and split at break string boundaries. Longer break strings are matched first (e.g., `\n\n` is preferred over `\n`).
@@ -166,9 +201,28 @@ await foreach (string chunk in chunker.ReadAllAsync())
 ```csharp
 public sealed class ChunkReader
 {
+    public static ChunkReader Create(TextReader reader, Func<string, int> countTokens,
+        ChunkReaderOptions? options = null);
     public static ChunkReader Create(StreamReader reader, Func<string, int> countTokens,
         ChunkReaderOptions? options = null);
     public IAsyncEnumerable<string> ReadAllAsync(CancellationToken cancellationToken = default);
+    public IAsyncEnumerable<TextChunk> ReadChunksAsync(CancellationToken cancellationToken = default);
+}
+```
+
+The `StreamReader` overload does nothing the `TextReader` one does not. It stays because
+chunking-v1.0.0 shipped `Create` taking a `StreamReader`, and assemblies compiled against that
+version bind to that exact signature at run time.
+
+### TextChunk
+
+```csharp
+public sealed class TextChunk
+{
+    public required string Text { get; init; }
+    public required long StartOffset { get; init; }   // characters from the start of the input
+    public required int TokenCount { get; init; }
+    public long EndOffset { get; }                    // StartOffset + Text.Length
 }
 ```
 

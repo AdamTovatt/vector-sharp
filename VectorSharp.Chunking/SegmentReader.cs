@@ -3,22 +3,31 @@ using System.Text;
 namespace VectorSharp.Chunking
 {
     /// <summary>
-    /// Reads text from a stream and splits it into segments at break string boundaries.
+    /// Reads text from a reader and splits it into segments at break string boundaries.
     /// Uses character-by-character reading with a lookahead buffer for memory efficiency.
     /// </summary>
     internal sealed class SegmentReader
     {
-        private readonly StreamReader _contentReader;
+        private readonly TextReader _contentReader;
         private readonly string[] _breakStrings;
         private readonly Queue<char> _unreadBuffer;
         private readonly char[] _readBuffer = new char[1];
+        private long _returnedCharacters;
+
+        /// <summary>
+        /// Gets the offset in the input of the segment returned by the most recent
+        /// <see cref="ReadNextAsync"/> call that returned one.
+        /// Characters pushed back into the lookahead buffer are not counted until the segment
+        /// that contains them is returned, so this is the true position of the segment text.
+        /// </summary>
+        internal long LastSegmentStartOffset { get; private set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SegmentReader"/> class.
         /// </summary>
-        /// <param name="contentReader">The stream reader to read content from.</param>
+        /// <param name="contentReader">The reader to read content from.</param>
         /// <param name="breakStrings">The strings that indicate break points. Will be sorted longest-first internally.</param>
-        internal SegmentReader(StreamReader contentReader, IReadOnlyList<string> breakStrings)
+        internal SegmentReader(TextReader contentReader, IReadOnlyList<string> breakStrings)
         {
             _contentReader = contentReader;
             _breakStrings = breakStrings.ToArray();
@@ -74,7 +83,7 @@ namespace VectorSharp.Chunking
                         _unreadBuffer.Enqueue(c);
                     }
 
-                    return result;
+                    return TrackPosition(result);
                 }
             }
 
@@ -88,10 +97,22 @@ namespace VectorSharp.Chunking
                     _unreadBuffer.Enqueue(c);
                 }
 
-                return result;
+                return TrackPosition(result);
             }
 
-            return segmentBuilder.Length > 0 ? segmentBuilder.ToString() : null;
+            return segmentBuilder.Length > 0 ? TrackPosition(segmentBuilder.ToString()) : null;
+        }
+
+        /// <summary>
+        /// Records where the segment about to be returned starts and advances the cursor past it.
+        /// Every return path of <see cref="ReadNextAsync"/> that produces a segment goes through
+        /// here, which is what keeps <see cref="LastSegmentStartOffset"/> in step with the input.
+        /// </summary>
+        private string TrackPosition(string segment)
+        {
+            LastSegmentStartOffset = _returnedCharacters;
+            _returnedCharacters += segment.Length;
+            return segment;
         }
 
         private string? FindLongestBreakString(StringBuilder content)

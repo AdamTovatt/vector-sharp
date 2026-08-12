@@ -2,12 +2,6 @@ namespace VectorSharp.Chunking.Tests
 {
     public class SegmentReaderTests
     {
-        private static StreamReader ReaderFrom(string text)
-        {
-            MemoryStream stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
-            return new StreamReader(stream);
-        }
-
         private static async Task<List<string>> ReadAllSegments(SegmentReader reader)
         {
             List<string> segments = new List<string>();

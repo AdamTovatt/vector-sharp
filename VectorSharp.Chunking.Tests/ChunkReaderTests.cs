@@ -2,29 +2,53 @@ namespace VectorSharp.Chunking.Tests
 {
     public class ChunkReaderTests
     {
-        private static StreamReader ReaderFrom(string text)
-        {
-            MemoryStream stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
-            return new StreamReader(stream);
-        }
-
-        private static async Task<List<string>> ReadAllChunks(ChunkReader reader)
-        {
-            List<string> chunks = new List<string>();
-            await foreach (string chunk in reader.ReadAllAsync())
-            {
-                chunks.Add(chunk);
-            }
-            return chunks;
-        }
-
         #region Create (validation)
 
+        // Both overloads are named explicitly: a bare null literal would be ambiguous between
+        // them, and each has to reject null on its own.
         [Fact]
-        public void Create_NullReader_Throws()
+        public void Create_NullTextReader_Throws()
         {
             Assert.Throws<ArgumentNullException>(() =>
-                ChunkReader.Create(null!, TokenCounter.CountWords));
+                ChunkReader.Create((TextReader)null!, TokenCounter.CountWords));
+        }
+
+        [Fact]
+        public void Create_NullStreamReader_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                ChunkReader.Create((StreamReader)null!, TokenCounter.CountWords));
+        }
+
+        /// <summary>
+        /// Looks for a Create overload whose first parameter is exactly <paramref name="readerType"/>.
+        /// The parameter types are compared by identity rather than through
+        /// <see cref="Type.GetMethod(string, Type[])"/>, which resolves like the compiler does and
+        /// would happily answer with the TextReader overload for any type derived from it.
+        /// </summary>
+        private static bool HasCreateOverloadTaking(Type readerType)
+        {
+            Type[] expected = [readerType, typeof(Func<string, int>), typeof(ChunkReaderOptions)];
+
+            return typeof(ChunkReader)
+                .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(method => method.Name == nameof(ChunkReader.Create))
+                .Any(method => method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(expected));
+        }
+
+        // Asserted through reflection because no call site can detect this: source that passes a
+        // StreamReader compiles whether or not the StreamReader overload exists, silently binding
+        // to the TextReader one instead. The already published signature only survives in IL.
+        [Fact]
+        public void Create_KeepsTheStreamReaderOverloadEarlierAssembliesBindTo()
+        {
+            Assert.True(HasCreateOverloadTaking(typeof(StreamReader)));
+        }
+
+        [Fact]
+        public void Create_HasTheWidenedTextReaderOverload()
+        {
+            Assert.True(HasCreateOverloadTaking(typeof(TextReader)));
         }
 
         [Fact]
