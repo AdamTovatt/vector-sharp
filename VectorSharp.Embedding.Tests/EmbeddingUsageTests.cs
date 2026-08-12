@@ -63,6 +63,22 @@ namespace VectorSharp.Embedding.Tests
         #region Reported usage
 
         [Fact]
+        public async Task EmbedBatchWithUsageAsync_ProviderReportsZeroTokens_UsageSurvivesAsAReportedZero()
+        {
+            // The other half of "null means unknown, never free": a reported zero is a real
+            // measurement and has to arrive as one, or the distinction the null carries is empty.
+            BatchRecorder recorder = new BatchRecorder();
+            await using EmbeddingService service = new EmbeddingService(
+                () => new BatchRecordingProvider(recorder, batch => new EmbeddingUsage { TokenCount = 0, Model = "free-tier" }));
+
+            EmbeddingResult result = await service.EmbedBatchWithUsageAsync(["a", "b"]);
+
+            Assert.NotNull(result.Usage);
+            Assert.Equal(0, result.Usage.TokenCount);
+            Assert.Equal("free-tier", result.Usage.Model);
+        }
+
+        [Fact]
         public async Task EmbedBatchWithUsageAsync_ProviderReportsUsage_PassesItThrough()
         {
             BatchRecorder recorder = new BatchRecorder();
